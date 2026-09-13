@@ -1,0 +1,47 @@
+[project]
+name = "quant-core"
+version = "0.1.0"
+description = "可解释、可恢复的离线美股多因子工程契约演示"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "numpy>=2.0,<3",
+  "pandas>=2.2,<3",
+  "pydantic>=2.10,<3",
+  "pyarrow>=18,<24",
+  "exchange-calendars>=4.6,<5",
+]
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "ruff>=0.9,<1", "mypy>=1.14,<2", "pandas-stubs>=2.2,<3"]
+
+[project.scripts]
+quant-core = "quant_core.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.26,<2"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/quant_core"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra --strict-markers"
+markers = ["integration: 离线跨模块测试", "live: 真实接口测试，默认不提供适配器"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src", "tools", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["exchange_calendars.*", "pyarrow.*"]
+ignore_missing_imports = true

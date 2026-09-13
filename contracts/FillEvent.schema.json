@@ -1,0 +1,106 @@
+{
+  "additionalProperties": false,
+  "description": "独立成交事实；价格原始美元、数量整股、费用美元，仅一次入账。",
+  "properties": {
+    "account_id": {
+      "title": "Account Id",
+      "type": "string"
+    },
+    "at": {
+      "format": "date-time",
+      "title": "At",
+      "type": "string"
+    },
+    "broker_order_id": {
+      "title": "Broker Order Id",
+      "type": "string"
+    },
+    "client_order_id": {
+      "title": "Client Order Id",
+      "type": "string"
+    },
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "fee": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Fee"
+    },
+    "fill_id": {
+      "title": "Fill Id",
+      "type": "string"
+    },
+    "kind": {
+      "const": "fill",
+      "default": "fill",
+      "title": "Kind",
+      "type": "string"
+    },
+    "price": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Price"
+    },
+    "quantity": {
+      "exclusiveMinimum": 0,
+      "title": "Quantity",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "security_id": {
+      "title": "Security Id",
+      "type": "string"
+    },
+    "side": {
+      "enum": [
+        "BUY",
+        "SELL"
+      ],
+      "title": "Side",
+      "type": "string"
+    },
+    "source": {
+      "default": "fake-broker",
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_id",
+    "fill_id",
+    "account_id",
+    "client_order_id",
+    "broker_order_id",
+    "security_id",
+    "side",
+    "quantity",
+    "price",
+    "fee",
+    "at"
+  ],
+  "title": "FillEvent",
+  "type": "object"
+}

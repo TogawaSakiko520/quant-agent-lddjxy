@@ -1,0 +1,151 @@
+{
+  "$defs": {
+    "OrderIntent": {
+      "additionalProperties": false,
+      "description": "提交前持久化的稳定订单意图；只允许整股限价，避免无界价格预算。",
+      "properties": {
+        "account_id": {
+          "title": "Account Id",
+          "type": "string"
+        },
+        "client_order_id": {
+          "title": "Client Order Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "decision_id": {
+          "title": "Decision Id",
+          "type": "string"
+        },
+        "eligible_at": {
+          "format": "date-time",
+          "title": "Eligible At",
+          "type": "string"
+        },
+        "limit_price": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Limit Price"
+        },
+        "quantity": {
+          "exclusiveMinimum": 0,
+          "title": "Quantity",
+          "type": "integer"
+        },
+        "reserved_fee": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "0",
+          "title": "Reserved Fee"
+        },
+        "schema_version": {
+          "const": "1.0.0",
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "security_id": {
+          "title": "Security Id",
+          "type": "string"
+        },
+        "side": {
+          "enum": [
+            "BUY",
+            "SELL"
+          ],
+          "title": "Side",
+          "type": "string"
+        },
+        "strategy_version": {
+          "default": "weekly-two-factor-1.0.0",
+          "title": "Strategy Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "client_order_id",
+        "account_id",
+        "decision_id",
+        "security_id",
+        "side",
+        "quantity",
+        "limit_price",
+        "created_at",
+        "eligible_at"
+      ],
+      "title": "OrderIntent",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "券商订单或内部意图投影；成交金额事实由 FillEvent 决定。",
+  "properties": {
+    "broker_order_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Broker Order Id"
+    },
+    "filled_quantity": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Filled Quantity",
+      "type": "integer"
+    },
+    "intent": {
+      "$ref": "#/$defs/OrderIntent"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "default": "PERSISTED",
+      "enum": [
+        "PERSISTED",
+        "OPEN",
+        "PARTIAL",
+        "FILLED",
+        "REJECTED",
+        "CANCEL_PENDING",
+        "CANCELED",
+        "UNKNOWN"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "intent"
+  ],
+  "title": "OrderRecord",
+  "type": "object"
+}

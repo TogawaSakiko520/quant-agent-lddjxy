@@ -1,0 +1,52 @@
+{
+  "additionalProperties": false,
+  "description": "稳定因子说明；公式、窗口和单位由测试与文档共同约束。",
+  "properties": {
+    "direction": {
+      "const": "higher_is_better",
+      "default": "higher_is_better",
+      "title": "Direction",
+      "type": "string"
+    },
+    "factor_id": {
+      "title": "Factor Id",
+      "type": "string"
+    },
+    "formula": {
+      "title": "Formula",
+      "type": "string"
+    },
+    "hypothesis": {
+      "title": "Hypothesis",
+      "type": "string"
+    },
+    "minimum_prices": {
+      "title": "Minimum Prices",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "unit": {
+      "title": "Unit",
+      "type": "string"
+    },
+    "version": {
+      "default": "1.0.0",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "factor_id",
+    "hypothesis",
+    "formula",
+    "minimum_prices",
+    "unit"
+  ],
+  "title": "FactorDefinition",
+  "type": "object"
+}

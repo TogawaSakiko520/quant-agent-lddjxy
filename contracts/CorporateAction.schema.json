@@ -1,0 +1,142 @@
+{
+  "additionalProperties": false,
+  "description": "离线拆股或现金股息事实；股息数量由权益事件固定，不能按支付日仓位猜测。",
+  "properties": {
+    "action_id": {
+      "title": "Action Id",
+      "type": "string"
+    },
+    "availability_basis": {
+      "default": "synthetic",
+      "enum": [
+        "synthetic",
+        "actual",
+        "vendor",
+        "conservative_delay"
+      ],
+      "title": "Availability Basis",
+      "type": "string"
+    },
+    "available_at": {
+      "format": "date-time",
+      "title": "Available At",
+      "type": "string"
+    },
+    "cash_per_share": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "default": "0",
+      "title": "Cash Per Share"
+    },
+    "content_hash": {
+      "default": "",
+      "title": "Content Hash",
+      "type": "string"
+    },
+    "entitlement_quantity": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Entitlement Quantity",
+      "type": "integer"
+    },
+    "event_time": {
+      "format": "date-time",
+      "title": "Event Time",
+      "type": "string"
+    },
+    "first_seen_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "First Seen At"
+    },
+    "kind": {
+      "enum": [
+        "split",
+        "dividend"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "published_at": {
+      "format": "date-time",
+      "title": "Published At",
+      "type": "string"
+    },
+    "quality": {
+      "enum": [
+        "good",
+        "quarantined"
+      ],
+      "title": "Quality",
+      "type": "string"
+    },
+    "ratio": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "default": "1",
+      "title": "Ratio"
+    },
+    "revision": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "security_id": {
+      "title": "Security Id",
+      "type": "string"
+    },
+    "source": {
+      "default": "synthetic-v1",
+      "title": "Source",
+      "type": "string"
+    },
+    "unit": {
+      "const": "USD",
+      "default": "USD",
+      "title": "Unit",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_time",
+    "published_at",
+    "available_at",
+    "quality",
+    "action_id",
+    "security_id",
+    "kind"
+  ],
+  "title": "CorporateAction",
+  "type": "object"
+}

@@ -1,0 +1,39 @@
+name: Offline engineering quality
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up the pinned Python runtime
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install the pinned uv tool
+        run: python -m pip install uv==0.12.5
+      - name: Install exactly the committed dependency lock
+        run: uv sync --locked
+      - name: Run the complete local quality gate
+        env:
+          REVIEW_BASE: ${{ github.event.pull_request.base.sha || '' }}
+        run: |
+          if [ -n "$REVIEW_BASE" ]; then
+            uv run --offline --locked quant-core check --base "$REVIEW_BASE"
+          else
+            uv run --offline --locked quant-core check
+          fi
+      - name: Run the credential-free fixed-data demonstration
+        run: uv run --offline --locked quant-core demo --output artifacts/ci-demo
+      - name: Replay the preserved input and compare deterministic facts
+        run: uv run --offline --locked quant-core replay --run-dir artifacts/ci-demo --output artifacts/ci-replay

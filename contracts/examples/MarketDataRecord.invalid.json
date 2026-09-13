@@ -1,0 +1,19 @@
+{
+  "availability_basis": "synthetic",
+  "available_at": "2023-01-03T21:15:00Z",
+  "content_hash": "a1428ad0f1d561e93a1705d548c9102fd7a60d06f7e5311df0a765848b8882c5",
+  "event_time": "2023-01-03T21:00:00Z",
+  "first_seen_at": null,
+  "published_at": "2023-01-03T21:00:00Z",
+  "quality": "good",
+  "raw_close": 101.0,
+  "raw_open": 100.0,
+  "revision": 1,
+  "schema_version": "1.0.0",
+  "security_id": "EXAMPLE-S1",
+  "session": "2023-01-03",
+  "source": "synthetic-v1",
+  "total_return_close": 101.0,
+  "unit": "EUR",
+  "volume": 1000000
+}

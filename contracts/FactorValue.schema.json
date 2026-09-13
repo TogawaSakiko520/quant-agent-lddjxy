@@ -1,0 +1,66 @@
+{
+  "additionalProperties": false,
+  "description": "某个证券的因子原值及输入溯源；缺失时用原因表达，不补零。",
+  "properties": {
+    "decision_time": {
+      "format": "date-time",
+      "title": "Decision Time",
+      "type": "string"
+    },
+    "factor_id": {
+      "title": "Factor Id",
+      "type": "string"
+    },
+    "factor_version": {
+      "default": "1.0.0",
+      "title": "Factor Version",
+      "type": "string"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "security_id": {
+      "title": "Security Id",
+      "type": "string"
+    },
+    "snapshot_id": {
+      "title": "Snapshot Id",
+      "type": "string"
+    },
+    "value": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Value"
+    }
+  },
+  "required": [
+    "security_id",
+    "factor_id",
+    "decision_time",
+    "snapshot_id"
+  ],
+  "title": "FactorValue",
+  "type": "object"
+}

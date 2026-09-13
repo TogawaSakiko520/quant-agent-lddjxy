@@ -1,0 +1,46 @@
+{
+  "additionalProperties": false,
+  "description": "执行时注入的原始价格事件；不能由未知的盘内路径推测成交。",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "title": "At",
+      "type": "string"
+    },
+    "price": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Price"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "security_id": {
+      "title": "Security Id",
+      "type": "string"
+    },
+    "tradable": {
+      "default": true,
+      "title": "Tradable",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "security_id",
+    "at",
+    "price"
+  ],
+  "title": "Quote",
+  "type": "object"
+}

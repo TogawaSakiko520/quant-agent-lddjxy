@@ -1,0 +1,105 @@
+{
+  "$defs": {
+    "TargetPosition": {
+      "additionalProperties": false,
+      "description": "一个证券的约束后目标；不可交易旧仓必须保留并说明。",
+      "properties": {
+        "quantity": {
+          "minimum": 0,
+          "title": "Quantity",
+          "type": "integer"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0.0",
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "sector": {
+          "title": "Sector",
+          "type": "string"
+        },
+        "security_id": {
+          "title": "Security Id",
+          "type": "string"
+        },
+        "weight": {
+          "minimum": 0,
+          "title": "Weight",
+          "type": "number"
+        }
+      },
+      "required": [
+        "security_id",
+        "sector",
+        "weight",
+        "quantity",
+        "reason"
+      ],
+      "title": "TargetPosition",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "组合层输出目标，不触碰券商；留现金和未完成目标均明确记录。",
+  "properties": {
+    "as_of": {
+      "format": "date-time",
+      "title": "As Of",
+      "type": "string"
+    },
+    "cash_weight": {
+      "title": "Cash Weight",
+      "type": "number"
+    },
+    "decision_id": {
+      "title": "Decision Id",
+      "type": "string"
+    },
+    "nav": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Nav"
+    },
+    "positions": {
+      "items": {
+        "$ref": "#/$defs/TargetPosition"
+      },
+      "title": "Positions",
+      "type": "array"
+    },
+    "reasons": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Reasons",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "decision_id",
+    "as_of",
+    "nav",
+    "positions",
+    "cash_weight"
+  ],
+  "title": "TargetPortfolio",
+  "type": "object"
+}

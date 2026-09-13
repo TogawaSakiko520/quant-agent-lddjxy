@@ -1,0 +1,75 @@
+{
+  "additionalProperties": false,
+  "description": "订单状态事件；本身不得再次改变现金或持仓。",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "title": "At",
+      "type": "string"
+    },
+    "broker_order_id": {
+      "title": "Broker Order Id",
+      "type": "string"
+    },
+    "client_order_id": {
+      "title": "Client Order Id",
+      "type": "string"
+    },
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "filled_quantity": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Filled Quantity",
+      "type": "integer"
+    },
+    "kind": {
+      "const": "order",
+      "default": "order",
+      "title": "Kind",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sequence": {
+      "minimum": 0,
+      "title": "Sequence",
+      "type": "integer"
+    },
+    "source": {
+      "default": "fake-broker",
+      "title": "Source",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "PERSISTED",
+        "OPEN",
+        "PARTIAL",
+        "FILLED",
+        "REJECTED",
+        "CANCEL_PENDING",
+        "CANCELED",
+        "UNKNOWN"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_id",
+    "client_order_id",
+    "broker_order_id",
+    "status",
+    "at",
+    "sequence"
+  ],
+  "title": "OrderEvent",
+  "type": "object"
+}

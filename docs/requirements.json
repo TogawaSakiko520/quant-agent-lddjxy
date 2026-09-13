@@ -1,0 +1,235 @@
+[
+  {
+    "id": "QC-001",
+    "implementation": [
+      "src/quant_core/contracts.py",
+      "src/quant_core/adapters/storage.py",
+      "tools/export_contracts.py"
+    ],
+    "tests": [
+      "tests/test_contracts.py",
+      "tests/test_governance.py"
+    ],
+    "docs": [
+      "docs/contracts.md",
+      "docs/runbooks/backups-migrations.md"
+    ]
+  },
+  {
+    "id": "QC-002",
+    "implementation": [
+      "src/quant_core/data.py"
+    ],
+    "tests": [
+      "tests/test_data.py"
+    ],
+    "docs": [
+      "docs/contracts.md"
+    ]
+  },
+  {
+    "id": "QC-003",
+    "implementation": [
+      "src/quant_core/universe.py",
+      "src/quant_core/data.py"
+    ],
+    "tests": [
+      "tests/test_data.py"
+    ],
+    "docs": [
+      "ARCHITECTURE.md"
+    ]
+  },
+  {
+    "id": "QC-004",
+    "implementation": [
+      "src/quant_core/factors.py"
+    ],
+    "tests": [
+      "tests/test_factors.py"
+    ],
+    "docs": [
+      "docs/factors/momentum.md",
+      "docs/factors/low-volatility.md"
+    ]
+  },
+  {
+    "id": "QC-005",
+    "implementation": [
+      "src/quant_core/signals.py"
+    ],
+    "tests": [
+      "tests/test_factors.py"
+    ],
+    "docs": [
+      "docs/code_walkthrough/business-chain.md",
+      "docs/strategies/weekly-two-factor.md"
+    ]
+  },
+  {
+    "id": "QC-006",
+    "implementation": [
+      "src/quant_core/portfolio.py"
+    ],
+    "tests": [
+      "tests/test_portfolio.py"
+    ],
+    "docs": [
+      "docs/runbooks/extensions.md",
+      "docs/strategies/weekly-two-factor.md"
+    ]
+  },
+  {
+    "id": "QC-007",
+    "implementation": [
+      "src/quant_core/regime.py"
+    ],
+    "tests": [
+      "tests/test_regime.py"
+    ],
+    "docs": [
+      "ARCHITECTURE.md",
+      "docs/regime.md"
+    ]
+  },
+  {
+    "id": "QC-008",
+    "implementation": [
+      "src/quant_core/execution.py",
+      "src/quant_core/adapters/fake_broker.py",
+      "src/quant_core/adapters/sqlite_store.py"
+    ],
+    "tests": [
+      "tests/test_execution.py"
+    ],
+    "docs": [
+      "docs/runbooks/recovery.md",
+      "docs/code_walkthrough/business-chain.md",
+      "docs/runbooks/backups-migrations.md"
+    ]
+  },
+  {
+    "id": "QC-009",
+    "implementation": [
+      "src/quant_core/risk.py"
+    ],
+    "tests": [
+      "tests/test_risk.py"
+    ],
+    "docs": [
+      "ASSUMPTIONS.md",
+      "docs/runbooks/recovery.md"
+    ]
+  },
+  {
+    "id": "QC-010",
+    "implementation": [
+      "src/quant_core/ledger.py",
+      "tools/backup_sqlite.py"
+    ],
+    "tests": [
+      "tests/test_ledger.py",
+      "tests/test_governance.py"
+    ],
+    "docs": [
+      "docs/contracts.md",
+      "docs/runbooks/recovery.md",
+      "docs/runbooks/backups-migrations.md"
+    ]
+  },
+  {
+    "id": "QC-011",
+    "implementation": [
+      "src/quant_core/adapters/calendar.py"
+    ],
+    "tests": [
+      "tests/test_calendar.py"
+    ],
+    "docs": [
+      "SPEC.md",
+      "docs/strategies/weekly-two-factor.md"
+    ]
+  },
+  {
+    "id": "QC-012",
+    "implementation": [
+      "src/quant_core/application.py",
+      "src/quant_core/reporting.py",
+      "src/quant_core/monitoring.py"
+    ],
+    "tests": [
+      "tests/test_application.py",
+      "tests/test_execution.py",
+      "tests/test_monitoring.py"
+    ],
+    "docs": [
+      "docs/code_walkthrough/business-chain.md",
+      "docs/runbooks/backups-migrations.md"
+    ]
+  },
+  {
+    "id": "QC-013",
+    "implementation": [
+      "src/quant_core/application.py",
+      "src/quant_core/cli.py"
+    ],
+    "tests": [
+      "tests/test_application.py"
+    ],
+    "docs": [
+      "README.md",
+      "docs/runbooks/quickstart.md"
+    ]
+  },
+  {
+    "id": "QC-014",
+    "implementation": [
+      "tools/governance.py"
+    ],
+    "tests": [
+      "tests/test_governance.py"
+    ],
+    "docs": [
+      "AGENTS.md",
+      "docs/runbooks/ai-maintenance.md"
+    ]
+  },
+  {
+    "id": "QC-015",
+    "implementation": [
+      "tools/governance.py"
+    ],
+    "tests": [
+      "tests/test_governance.py"
+    ],
+    "docs": [
+      "docs/adr/0002-governance-evidence.md",
+      "prompts/review.md"
+    ]
+  },
+  {
+    "id": "QC-016",
+    "implementation": [
+      "src/quant_core/contracts.py"
+    ],
+    "tests": [
+      "tests/test_contracts.py"
+    ],
+    "docs": [
+      "docs/contracts.md"
+    ]
+  },
+  {
+    "id": "QC-017",
+    "implementation": [
+      "src/quant_core/research.py"
+    ],
+    "tests": [
+      "tests/test_research.py"
+    ],
+    "docs": [
+      "SPEC.md",
+      "docs/research.md"
+    ]
+  }
+]

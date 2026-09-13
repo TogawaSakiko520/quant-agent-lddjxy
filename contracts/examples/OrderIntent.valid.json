@@ -1,0 +1,14 @@
+{
+  "account_id": "DEMO",
+  "client_order_id": "EXAMPLE-ORDER-1",
+  "created_at": "2023-01-03T21:16:00Z",
+  "decision_id": "EXAMPLE-DECISION-1",
+  "eligible_at": "2023-01-04T14:30:00Z",
+  "limit_price": "102",
+  "quantity": 10,
+  "reserved_fee": "1",
+  "schema_version": "1.0.0",
+  "security_id": "EXAMPLE-S1",
+  "side": "BUY",
+  "strategy_version": "weekly-two-factor-1.0.0"
+}

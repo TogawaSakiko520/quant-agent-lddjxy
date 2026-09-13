@@ -1,0 +1,26 @@
+# 以下全部为离线工程演示参数，不是实盘批准参数；金额为美元。
+mode = "offline"
+demo_only = true
+account_id = "DEMO"
+seed = 1729
+start = "2020-09-01"
+end = "2023-12-29"
+securities = 30
+initial_cash = "100000"
+max_positions = 20
+target_weight = 0.045
+max_gross = 0.90
+max_single = 0.05
+max_sector = 0.25
+# 买卖总额/期初净值；目标可能需要多轮完成。
+max_turnover = 1.0
+max_adv_fraction = 0.01
+fee_per_share = "0.005"
+minimum_fee = "1"
+price_buffer = "0.01"
+daily_loss_limit = 0.03
+drawdown_limit = 0.10
+quote_max_age_seconds = 60
+ranking_buffer = 0
+# 合成成交即结算仅用于演示，不能套用真实现金账户。
+settlement = "simulated_immediate_settlement"

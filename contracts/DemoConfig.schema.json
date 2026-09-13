@@ -1,0 +1,192 @@
+{
+  "additionalProperties": false,
+  "description": "仅适用于离线工程的显式参数；拒绝 live 模式，无真实账户授权含义。",
+  "properties": {
+    "account_id": {
+      "const": "DEMO",
+      "default": "DEMO",
+      "title": "Account Id",
+      "type": "string"
+    },
+    "daily_loss_limit": {
+      "default": 0.03,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Daily Loss Limit",
+      "type": "number"
+    },
+    "demo_only": {
+      "const": true,
+      "default": true,
+      "title": "Demo Only",
+      "type": "boolean"
+    },
+    "drawdown_limit": {
+      "default": 0.1,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Drawdown Limit",
+      "type": "number"
+    },
+    "end": {
+      "default": "2023-12-29",
+      "format": "date",
+      "title": "End",
+      "type": "string"
+    },
+    "fee_per_share": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "default": "0.005",
+      "title": "Fee Per Share"
+    },
+    "initial_cash": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "default": "100000",
+      "title": "Initial Cash"
+    },
+    "max_adv_fraction": {
+      "default": 0.01,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Max Adv Fraction",
+      "type": "number"
+    },
+    "max_gross": {
+      "default": 0.9,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Max Gross",
+      "type": "number"
+    },
+    "max_positions": {
+      "default": 20,
+      "minimum": 1,
+      "title": "Max Positions",
+      "type": "integer"
+    },
+    "max_sector": {
+      "default": 0.25,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Max Sector",
+      "type": "number"
+    },
+    "max_single": {
+      "default": 0.05,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Max Single",
+      "type": "number"
+    },
+    "max_turnover": {
+      "default": 1.0,
+      "exclusiveMinimum": 0,
+      "maximum": 2,
+      "title": "Max Turnover",
+      "type": "number"
+    },
+    "minimum_fee": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "default": "1",
+      "title": "Minimum Fee"
+    },
+    "mode": {
+      "const": "offline",
+      "default": "offline",
+      "title": "Mode",
+      "type": "string"
+    },
+    "price_buffer": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "default": "0.01",
+      "title": "Price Buffer"
+    },
+    "quote_max_age_seconds": {
+      "default": 60,
+      "minimum": 0,
+      "title": "Quote Max Age Seconds",
+      "type": "integer"
+    },
+    "ranking_buffer": {
+      "const": 0,
+      "default": 0,
+      "title": "Ranking Buffer",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "securities": {
+      "default": 30,
+      "maximum": 100,
+      "minimum": 2,
+      "title": "Securities",
+      "type": "integer"
+    },
+    "seed": {
+      "default": 1729,
+      "title": "Seed",
+      "type": "integer"
+    },
+    "settlement": {
+      "const": "simulated_immediate_settlement",
+      "default": "simulated_immediate_settlement",
+      "title": "Settlement",
+      "type": "string"
+    },
+    "start": {
+      "default": "2020-09-01",
+      "format": "date",
+      "title": "Start",
+      "type": "string"
+    },
+    "target_weight": {
+      "default": 0.045,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Target Weight",
+      "type": "number"
+    }
+  },
+  "title": "DemoConfig",
+  "type": "object"
+}

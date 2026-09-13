@@ -1,0 +1,124 @@
+{
+  "additionalProperties": false,
+  "description": "交易日原始行情及独立研究价格；价格单位美元，成交量单位股。",
+  "properties": {
+    "availability_basis": {
+      "default": "synthetic",
+      "enum": [
+        "synthetic",
+        "actual",
+        "vendor",
+        "conservative_delay"
+      ],
+      "title": "Availability Basis",
+      "type": "string"
+    },
+    "available_at": {
+      "format": "date-time",
+      "title": "Available At",
+      "type": "string"
+    },
+    "content_hash": {
+      "default": "",
+      "title": "Content Hash",
+      "type": "string"
+    },
+    "event_time": {
+      "format": "date-time",
+      "title": "Event Time",
+      "type": "string"
+    },
+    "first_seen_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "First Seen At"
+    },
+    "published_at": {
+      "format": "date-time",
+      "title": "Published At",
+      "type": "string"
+    },
+    "quality": {
+      "enum": [
+        "good",
+        "quarantined"
+      ],
+      "title": "Quality",
+      "type": "string"
+    },
+    "raw_close": {
+      "exclusiveMinimum": 0,
+      "title": "Raw Close",
+      "type": "number"
+    },
+    "raw_open": {
+      "exclusiveMinimum": 0,
+      "title": "Raw Open",
+      "type": "number"
+    },
+    "revision": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "security_id": {
+      "title": "Security Id",
+      "type": "string"
+    },
+    "session": {
+      "format": "date",
+      "title": "Session",
+      "type": "string"
+    },
+    "source": {
+      "default": "synthetic-v1",
+      "title": "Source",
+      "type": "string"
+    },
+    "total_return_close": {
+      "exclusiveMinimum": 0,
+      "title": "Total Return Close",
+      "type": "number"
+    },
+    "unit": {
+      "const": "USD",
+      "default": "USD",
+      "title": "Unit",
+      "type": "string"
+    },
+    "volume": {
+      "minimum": 0,
+      "title": "Volume",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "event_time",
+    "published_at",
+    "available_at",
+    "quality",
+    "security_id",
+    "session",
+    "raw_open",
+    "raw_close",
+    "total_return_close",
+    "volume"
+  ],
+  "title": "MarketDataRecord",
+  "type": "object"
+}

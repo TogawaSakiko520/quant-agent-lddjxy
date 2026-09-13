@@ -1,0 +1,534 @@
+{
+  "$defs": {
+    "CorporateAction": {
+      "additionalProperties": false,
+      "description": "离线拆股或现金股息事实；股息数量由权益事件固定，不能按支付日仓位猜测。",
+      "properties": {
+        "action_id": {
+          "title": "Action Id",
+          "type": "string"
+        },
+        "availability_basis": {
+          "default": "synthetic",
+          "enum": [
+            "synthetic",
+            "actual",
+            "vendor",
+            "conservative_delay"
+          ],
+          "title": "Availability Basis",
+          "type": "string"
+        },
+        "available_at": {
+          "format": "date-time",
+          "title": "Available At",
+          "type": "string"
+        },
+        "cash_per_share": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "0",
+          "title": "Cash Per Share"
+        },
+        "content_hash": {
+          "default": "",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "entitlement_quantity": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Entitlement Quantity",
+          "type": "integer"
+        },
+        "event_time": {
+          "format": "date-time",
+          "title": "Event Time",
+          "type": "string"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "kind": {
+          "enum": [
+            "split",
+            "dividend"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "published_at": {
+          "format": "date-time",
+          "title": "Published At",
+          "type": "string"
+        },
+        "quality": {
+          "enum": [
+            "good",
+            "quarantined"
+          ],
+          "title": "Quality",
+          "type": "string"
+        },
+        "ratio": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "1",
+          "title": "Ratio"
+        },
+        "revision": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0.0",
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "security_id": {
+          "title": "Security Id",
+          "type": "string"
+        },
+        "source": {
+          "default": "synthetic-v1",
+          "title": "Source",
+          "type": "string"
+        },
+        "unit": {
+          "const": "USD",
+          "default": "USD",
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_time",
+        "published_at",
+        "available_at",
+        "quality",
+        "action_id",
+        "security_id",
+        "kind"
+      ],
+      "title": "CorporateAction",
+      "type": "object"
+    },
+    "FillEvent": {
+      "additionalProperties": false,
+      "description": "独立成交事实；价格原始美元、数量整股、费用美元，仅一次入账。",
+      "properties": {
+        "account_id": {
+          "title": "Account Id",
+          "type": "string"
+        },
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "broker_order_id": {
+          "title": "Broker Order Id",
+          "type": "string"
+        },
+        "client_order_id": {
+          "title": "Client Order Id",
+          "type": "string"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "fee": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Fee"
+        },
+        "fill_id": {
+          "title": "Fill Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "fill",
+          "default": "fill",
+          "title": "Kind",
+          "type": "string"
+        },
+        "price": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Price"
+        },
+        "quantity": {
+          "exclusiveMinimum": 0,
+          "title": "Quantity",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0.0",
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "security_id": {
+          "title": "Security Id",
+          "type": "string"
+        },
+        "side": {
+          "enum": [
+            "BUY",
+            "SELL"
+          ],
+          "title": "Side",
+          "type": "string"
+        },
+        "source": {
+          "default": "fake-broker",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "fill_id",
+        "account_id",
+        "client_order_id",
+        "broker_order_id",
+        "security_id",
+        "side",
+        "quantity",
+        "price",
+        "fee",
+        "at"
+      ],
+      "title": "FillEvent",
+      "type": "object"
+    },
+    "OrderEvent": {
+      "additionalProperties": false,
+      "description": "订单状态事件；本身不得再次改变现金或持仓。",
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "broker_order_id": {
+          "title": "Broker Order Id",
+          "type": "string"
+        },
+        "client_order_id": {
+          "title": "Client Order Id",
+          "type": "string"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "filled_quantity": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Filled Quantity",
+          "type": "integer"
+        },
+        "kind": {
+          "const": "order",
+          "default": "order",
+          "title": "Kind",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0.0",
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "sequence": {
+          "minimum": 0,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "source": {
+          "default": "fake-broker",
+          "title": "Source",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "PERSISTED",
+            "OPEN",
+            "PARTIAL",
+            "FILLED",
+            "REJECTED",
+            "CANCEL_PENDING",
+            "CANCELED",
+            "UNKNOWN"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_id",
+        "client_order_id",
+        "broker_order_id",
+        "status",
+        "at",
+        "sequence"
+      ],
+      "title": "OrderEvent",
+      "type": "object"
+    },
+    "OrderIntent": {
+      "additionalProperties": false,
+      "description": "提交前持久化的稳定订单意图；只允许整股限价，避免无界价格预算。",
+      "properties": {
+        "account_id": {
+          "title": "Account Id",
+          "type": "string"
+        },
+        "client_order_id": {
+          "title": "Client Order Id",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "decision_id": {
+          "title": "Decision Id",
+          "type": "string"
+        },
+        "eligible_at": {
+          "format": "date-time",
+          "title": "Eligible At",
+          "type": "string"
+        },
+        "limit_price": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Limit Price"
+        },
+        "quantity": {
+          "exclusiveMinimum": 0,
+          "title": "Quantity",
+          "type": "integer"
+        },
+        "reserved_fee": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "0",
+          "title": "Reserved Fee"
+        },
+        "schema_version": {
+          "const": "1.0.0",
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "security_id": {
+          "title": "Security Id",
+          "type": "string"
+        },
+        "side": {
+          "enum": [
+            "BUY",
+            "SELL"
+          ],
+          "title": "Side",
+          "type": "string"
+        },
+        "strategy_version": {
+          "default": "weekly-two-factor-1.0.0",
+          "title": "Strategy Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "client_order_id",
+        "account_id",
+        "decision_id",
+        "security_id",
+        "side",
+        "quantity",
+        "limit_price",
+        "created_at",
+        "eligible_at"
+      ],
+      "title": "OrderIntent",
+      "type": "object"
+    },
+    "OrderRecord": {
+      "additionalProperties": false,
+      "description": "券商订单或内部意图投影；成交金额事实由 FillEvent 决定。",
+      "properties": {
+        "broker_order_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Broker Order Id"
+        },
+        "filled_quantity": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Filled Quantity",
+          "type": "integer"
+        },
+        "intent": {
+          "$ref": "#/$defs/OrderIntent"
+        },
+        "schema_version": {
+          "const": "1.0.0",
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "status": {
+          "default": "PERSISTED",
+          "enum": [
+            "PERSISTED",
+            "OPEN",
+            "PARTIAL",
+            "FILLED",
+            "REJECTED",
+            "CANCEL_PENDING",
+            "CANCELED",
+            "UNKNOWN"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "intent"
+      ],
+      "title": "OrderRecord",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "内部事务操作的有序证据；回放只写新状态库，不向券商重新提交。",
+  "properties": {
+    "at": {
+      "format": "date-time",
+      "title": "At",
+      "type": "string"
+    },
+    "operation": {
+      "enum": [
+        "intent",
+        "order",
+        "event",
+        "action"
+      ],
+      "title": "Operation",
+      "type": "string"
+    },
+    "payload": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OrderIntent"
+        },
+        {
+          "$ref": "#/$defs/OrderRecord"
+        },
+        {
+          "$ref": "#/$defs/OrderEvent"
+        },
+        {
+          "$ref": "#/$defs/FillEvent"
+        },
+        {
+          "$ref": "#/$defs/CorporateAction"
+        }
+      ],
+      "title": "Payload"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sequence": {
+      "minimum": 1,
+      "title": "Sequence",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "sequence",
+    "operation",
+    "payload",
+    "at"
+  ],
+  "title": "JournalEntry",
+  "type": "object"
+}

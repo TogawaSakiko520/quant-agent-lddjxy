@@ -1,0 +1,321 @@
+{
+  "$defs": {
+    "MarketDataRecord": {
+      "additionalProperties": false,
+      "description": "交易日原始行情及独立研究价格；价格单位美元，成交量单位股。",
+      "properties": {
+        "availability_basis": {
+          "default": "synthetic",
+          "enum": [
+            "synthetic",
+            "actual",
+            "vendor",
+            "conservative_delay"
+          ],
+          "title": "Availability Basis",
+          "type": "string"
+        },
+        "available_at": {
+          "format": "date-time",
+          "title": "Available At",
+          "type": "string"
+        },
+        "content_hash": {
+          "default": "",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "event_time": {
+          "format": "date-time",
+          "title": "Event Time",
+          "type": "string"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "published_at": {
+          "format": "date-time",
+          "title": "Published At",
+          "type": "string"
+        },
+        "quality": {
+          "enum": [
+            "good",
+            "quarantined"
+          ],
+          "title": "Quality",
+          "type": "string"
+        },
+        "raw_close": {
+          "exclusiveMinimum": 0,
+          "title": "Raw Close",
+          "type": "number"
+        },
+        "raw_open": {
+          "exclusiveMinimum": 0,
+          "title": "Raw Open",
+          "type": "number"
+        },
+        "revision": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0.0",
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "security_id": {
+          "title": "Security Id",
+          "type": "string"
+        },
+        "session": {
+          "format": "date",
+          "title": "Session",
+          "type": "string"
+        },
+        "source": {
+          "default": "synthetic-v1",
+          "title": "Source",
+          "type": "string"
+        },
+        "total_return_close": {
+          "exclusiveMinimum": 0,
+          "title": "Total Return Close",
+          "type": "number"
+        },
+        "unit": {
+          "const": "USD",
+          "default": "USD",
+          "title": "Unit",
+          "type": "string"
+        },
+        "volume": {
+          "minimum": 0,
+          "title": "Volume",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "event_time",
+        "published_at",
+        "available_at",
+        "quality",
+        "security_id",
+        "session",
+        "raw_open",
+        "raw_close",
+        "total_return_close",
+        "volume"
+      ],
+      "title": "MarketDataRecord",
+      "type": "object"
+    },
+    "SecurityRecord": {
+      "additionalProperties": false,
+      "description": "历史证券主表版本；有效区间和可用时间共同限制历史查询。",
+      "properties": {
+        "asset_type": {
+          "default": "common_stock",
+          "enum": [
+            "common_stock",
+            "benchmark"
+          ],
+          "title": "Asset Type",
+          "type": "string"
+        },
+        "availability_basis": {
+          "default": "synthetic",
+          "enum": [
+            "synthetic",
+            "actual",
+            "vendor",
+            "conservative_delay"
+          ],
+          "title": "Availability Basis",
+          "type": "string"
+        },
+        "available_at": {
+          "format": "date-time",
+          "title": "Available At",
+          "type": "string"
+        },
+        "content_hash": {
+          "default": "",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "effective_from": {
+          "format": "date",
+          "title": "Effective From",
+          "type": "string"
+        },
+        "effective_to": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective To"
+        },
+        "event_time": {
+          "format": "date-time",
+          "title": "Event Time",
+          "type": "string"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "listed": {
+          "default": true,
+          "title": "Listed",
+          "type": "boolean"
+        },
+        "published_at": {
+          "format": "date-time",
+          "title": "Published At",
+          "type": "string"
+        },
+        "quality": {
+          "enum": [
+            "good",
+            "quarantined"
+          ],
+          "title": "Quality",
+          "type": "string"
+        },
+        "revision": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "1.0.0",
+          "default": "1.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "sector": {
+          "title": "Sector",
+          "type": "string"
+        },
+        "security_id": {
+          "title": "Security Id",
+          "type": "string"
+        },
+        "source": {
+          "default": "synthetic-v1",
+          "title": "Source",
+          "type": "string"
+        },
+        "ticker": {
+          "title": "Ticker",
+          "type": "string"
+        },
+        "tradable": {
+          "default": true,
+          "title": "Tradable",
+          "type": "boolean"
+        },
+        "unit": {
+          "const": "identity",
+          "default": "identity",
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "event_time",
+        "published_at",
+        "available_at",
+        "quality",
+        "security_id",
+        "ticker",
+        "sector",
+        "effective_from"
+      ],
+      "title": "SecurityRecord",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "已冻结的历史可知输入；版本指纹包含证券和行情，输出不得原地覆盖。",
+  "properties": {
+    "calendar_version": {
+      "title": "Calendar Version",
+      "type": "string"
+    },
+    "content_hash": {
+      "title": "Content Hash",
+      "type": "string"
+    },
+    "decision_time": {
+      "format": "date-time",
+      "title": "Decision Time",
+      "type": "string"
+    },
+    "records": {
+      "items": {
+        "$ref": "#/$defs/MarketDataRecord"
+      },
+      "title": "Records",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "securities": {
+      "items": {
+        "$ref": "#/$defs/SecurityRecord"
+      },
+      "title": "Securities",
+      "type": "array"
+    },
+    "snapshot_id": {
+      "title": "Snapshot Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "snapshot_id",
+    "decision_time",
+    "calendar_version",
+    "securities",
+    "records",
+    "content_hash"
+  ],
+  "title": "DataSnapshot",
+  "type": "object"
+}

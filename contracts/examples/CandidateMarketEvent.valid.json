@@ -1,0 +1,26 @@
+{
+  "approval_status": "candidate",
+  "availability_basis": "synthetic",
+  "available_at": "2023-01-03T21:15:00Z",
+  "candidate_id": "EXAMPLE-EVENT-1",
+  "content_hash": "5a3e744798dd19ceb43aa0cb0589da2e37b6c1349a86a049a583d883620bfa3d",
+  "event_time": "2023-01-03T21:00:00Z",
+  "event_type": "synthetic_notice",
+  "extractor_version": "fixture-1.0.0",
+  "facts": {
+    "description": "仅用于契约校验的合成事实"
+  },
+  "first_seen_at": null,
+  "historical_limitations": "未以前向影子数据验证，不能回填为历史已知特征",
+  "inference": "",
+  "published_at": "2023-01-03T21:00:00Z",
+  "quality": "good",
+  "revision": 1,
+  "schema_version": "1.0.0",
+  "security_ids": [
+    "EXAMPLE-S1"
+  ],
+  "source": "synthetic-v1",
+  "source_url": "https://example.invalid/notice/1",
+  "unit": "USD"
+}

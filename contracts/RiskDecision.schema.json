@@ -1,0 +1,44 @@
+{
+  "additionalProperties": false,
+  "description": "分开表达新增、撤单和减仓权限，避免万能清仓开关。",
+  "properties": {
+    "allowed": {
+      "title": "Allowed",
+      "type": "boolean"
+    },
+    "freeze_new_risk": {
+      "default": false,
+      "title": "Freeze New Risk",
+      "type": "boolean"
+    },
+    "operation": {
+      "enum": [
+        "NEW",
+        "CANCEL",
+        "REPLACE",
+        "REDUCE"
+      ],
+      "title": "Operation",
+      "type": "string"
+    },
+    "reasons": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Reasons",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "allowed",
+    "operation"
+  ],
+  "title": "RiskDecision",
+  "type": "object"
+}

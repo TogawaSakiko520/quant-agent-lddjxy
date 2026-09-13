@@ -1,0 +1,53 @@
+{
+  "additionalProperties": false,
+  "description": "透明市场状态观察；首版不改变组合风险预算。",
+  "properties": {
+    "affects_budget": {
+      "const": false,
+      "default": false,
+      "title": "Affects Budget",
+      "type": "boolean"
+    },
+    "as_of": {
+      "format": "date-time",
+      "title": "As Of",
+      "type": "string"
+    },
+    "evidence": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "title": "Evidence",
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "state": {
+      "title": "State",
+      "type": "string"
+    },
+    "version": {
+      "default": "observer-1.0.0",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "as_of",
+    "state",
+    "evidence"
+  ],
+  "title": "RegimeAssessment",
+  "type": "object"
+}

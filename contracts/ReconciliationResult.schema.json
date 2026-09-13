@@ -1,0 +1,35 @@
+{
+  "additionalProperties": false,
+  "description": "内部账本与独立券商状态比较结果；报表不得修正差异事实。",
+  "properties": {
+    "as_of": {
+      "format": "date-time",
+      "title": "As Of",
+      "type": "string"
+    },
+    "differences": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Differences",
+      "type": "array"
+    },
+    "matched": {
+      "title": "Matched",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "as_of",
+    "matched",
+    "differences"
+  ],
+  "title": "ReconciliationResult",
+  "type": "object"
+}

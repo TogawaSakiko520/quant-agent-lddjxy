@@ -1,0 +1,43 @@
+{
+  "additionalProperties": false,
+  "description": "共同合格股票池的方向一致评分，不解释为预期收益。",
+  "properties": {
+    "components": {
+      "additionalProperties": {
+        "maximum": 1,
+        "minimum": 0,
+        "type": "number"
+      },
+      "title": "Components",
+      "type": "object"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sector": {
+      "title": "Sector",
+      "type": "string"
+    },
+    "security_id": {
+      "title": "Security Id",
+      "type": "string"
+    },
+    "value": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Value",
+      "type": "number"
+    }
+  },
+  "required": [
+    "security_id",
+    "sector",
+    "components",
+    "value"
+  ],
+  "title": "Score",
+  "type": "object"
+}

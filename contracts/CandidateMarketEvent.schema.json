@@ -1,0 +1,147 @@
+{
+  "additionalProperties": false,
+  "description": "market-intel 的隔离候选契约；内容是待验证数据，没有交易授权语义。",
+  "properties": {
+    "approval_status": {
+      "const": "candidate",
+      "default": "candidate",
+      "title": "Approval Status",
+      "type": "string"
+    },
+    "availability_basis": {
+      "default": "synthetic",
+      "enum": [
+        "synthetic",
+        "actual",
+        "vendor",
+        "conservative_delay"
+      ],
+      "title": "Availability Basis",
+      "type": "string"
+    },
+    "available_at": {
+      "format": "date-time",
+      "title": "Available At",
+      "type": "string"
+    },
+    "candidate_id": {
+      "title": "Candidate Id",
+      "type": "string"
+    },
+    "content_hash": {
+      "default": "",
+      "title": "Content Hash",
+      "type": "string"
+    },
+    "event_time": {
+      "format": "date-time",
+      "title": "Event Time",
+      "type": "string"
+    },
+    "event_type": {
+      "title": "Event Type",
+      "type": "string"
+    },
+    "extractor_version": {
+      "title": "Extractor Version",
+      "type": "string"
+    },
+    "facts": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          }
+        ]
+      },
+      "title": "Facts",
+      "type": "object"
+    },
+    "first_seen_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "First Seen At"
+    },
+    "historical_limitations": {
+      "default": "未以前向影子数据验证，不能回填为历史已知特征",
+      "title": "Historical Limitations",
+      "type": "string"
+    },
+    "inference": {
+      "default": "",
+      "title": "Inference",
+      "type": "string"
+    },
+    "published_at": {
+      "format": "date-time",
+      "title": "Published At",
+      "type": "string"
+    },
+    "quality": {
+      "enum": [
+        "good",
+        "quarantined"
+      ],
+      "title": "Quality",
+      "type": "string"
+    },
+    "revision": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "security_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Security Ids",
+      "type": "array"
+    },
+    "source": {
+      "default": "synthetic-v1",
+      "title": "Source",
+      "type": "string"
+    },
+    "source_url": {
+      "title": "Source Url",
+      "type": "string"
+    },
+    "unit": {
+      "default": "USD",
+      "title": "Unit",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_time",
+    "published_at",
+    "available_at",
+    "quality",
+    "candidate_id",
+    "security_ids",
+    "event_type",
+    "source_url",
+    "facts",
+    "extractor_version"
+  ],
+  "title": "CandidateMarketEvent",
+  "type": "object"
+}
