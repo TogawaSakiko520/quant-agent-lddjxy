@@ -65,6 +65,8 @@ def test_order_hard_checks_losses_and_unreconciled_state() -> None:
     )
     quotes = {"A": Quote(security_id="A", at=now, price=Decimal("100"))}
     config = DemoConfig()
+    # adv 按证券 ID 提供此前20日平均成交股数；reference_nav 是日内损失基线净值，
+    # peak_nav 是回撤高点净值，后两者均为美元，本例先设为当前净值使损失检查不触发。
     valid = assess_order(
         intent,
         account,

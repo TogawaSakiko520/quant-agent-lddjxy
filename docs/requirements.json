@@ -205,7 +205,8 @@
       "docs/code_walkthrough/business-chain.md",
       "docs/audit/comment-semantics-migration.md",
       "prompts/README.md",
-      "docs/audit/local-context-readability.md"
+      "docs/audit/local-context-readability.md",
+      "docs/audit/readability-compliance.md"
     ]
   },
   {

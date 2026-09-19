@@ -33,7 +33,8 @@ def observation(at: datetime, security_id: str = "A", value: float = 1.0) -> Res
 
 
 def test_rank_ic_coverage_and_factor_correlation_hand_sample() -> None:
-    """单日五只因子与收益同序，IC=1、反向因子相关=-1，覆盖可手算。"""
+    """单日五只证券的动量与收益同序，IC=1；两因子排名相反，相关=-1，覆盖可手算。"""
+    # 本项目的 Rank IC 是同日因子值与后续收益各自排名后的相关系数；本例严格同序，故为1。
     at = datetime(2021, 1, 15, 21, tzinfo=UTC)
     # 标签1%、2%、3%、4%、5%与动量单调相同。
     samples = [observation(at, str(index), float(index)) for index in range(1, 6)]
@@ -43,6 +44,7 @@ def test_rank_ic_coverage_and_factor_correlation_hand_sample() -> None:
     assert result["factors"]["momentum"]["mean_rank_ic"] == pytest.approx(1.0)
     # 两因子方向在本人工样本中恰好相反。
     assert result["factor_rank_correlations"]["low_volatility:momentum"] == pytest.approx(-1.0)
+    # 五只证券按因子从低到高分成五组，每组恰好一只，组内均值就是该证券的收益标签。
     assert result["factors"]["momentum"]["quintile_returns_by_date"]["2021-01-15"] == pytest.approx(
         [0.01, 0.02, 0.03, 0.04, 0.05]
     )

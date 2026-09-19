@@ -26,7 +26,12 @@ def render_report(
     reconciliation: ReconciliationResult,
     alerts: list[Alert],
 ) -> str:
-    """把同次运行的输入、评分、目标、订单和账户事实排成 Markdown；金额美元、数量股。"""
+    """把输入、评分、目标、订单和账户事实排成 Markdown；金额美元、数量股。
+
+    调用方须保证这些对象来自同次运行且已核验；本函数不检查跨对象的快照、决策
+    身份或时点一致性，只组织并返回文本，不写文件。当前 report_run 在重生报告前
+    先调用 validate_run 校验运行证据，再把留存对象传到这里。
+    """
     # 字典展示必须显式排序，不能依赖内存构造或JSON读回的插入顺序。
     regime_evidence = json.dumps(regime.evidence, ensure_ascii=False, sort_keys=True)
     exclusions = json.dumps(signals.excluded, ensure_ascii=False, sort_keys=True)

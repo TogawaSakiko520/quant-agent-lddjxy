@@ -355,7 +355,7 @@ def test_sqlite_backup_and_restore_preserve_independent_fixed_facts(tmp_path: Pa
 
 
 def test_sqlite_backup_rejects_missing_or_corrupt_source(tmp_path: Path) -> None:
-    """缺失或非数据库源不能生成一个假成功空库；目标目录保持未创建。"""
+    """缺失或非数据库源不能生成假成功的目标数据库文件，也不能把缺失源路径建成空库。"""
     with pytest.raises(FileNotFoundError):
         backup_database(tmp_path / "missing.sqlite", tmp_path / "missing-copy.sqlite")
     assert not (tmp_path / "missing.sqlite").exists()

@@ -366,6 +366,8 @@ class RiskDecision(Contract):
 
     allowed: bool
     operation: Literal["NEW", "CANCEL", "REPLACE", "REDUCE"]
+    # 本次判断是否要求禁止新增风险的结果标志，不会自行写入账户或冻结库。
+    # 持久冻结另由 EventStore.freeze 执行；allowed 仍单独表达本次具体操作能否继续。
     freeze_new_risk: bool = False
     # 可机器判断、可报告的原因代码。
     reasons: list[str] = Field(default_factory=list)
@@ -508,8 +510,11 @@ class RunManifest(Contract):
     config: DemoConfig
     # 初始账户事实用于离线恢复。
     initial_account: AccountSnapshot
+    # 输入身份/版本索引：演示保存快照ID及哈希、日历版本和主表哈希；回放另加源清单哈希。
+    # 值是索引或摘要字符串，不是行情正文；校验和回放据此核对留存的原始输入。
     inputs: dict[str, str]
-    # 每个不可变输入/输出文件的内容哈希。
+    # 运行目录内的相对文件名→文件字节SHA-256，供validate_artifacts检查路径及内容。
+    # 不含manifest.json自身，避免哈希循环；摘要检查不代替模型或跨对象语义校验。
     artifacts: dict[str, str]
     limitations: list[str]
 

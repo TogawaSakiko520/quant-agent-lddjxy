@@ -295,7 +295,10 @@ class ExecutionService:
     ) -> OrderRecord:
         """正常策略提交唯一入口；输入美元整股意图与原始报价，拒绝抛 RiskBlocked。
 
-        security_records 应按决策时点提供主表，adv 是历史日均成交股数；target 是批准目标。
+        target 保留原决策的批准目标；security_records 应由调用方准备为执行检查时已知、
+        有效的主表，当前买入资格由 assess_order 按注入时钟 now 核验。行业聚合仍存在
+        F01 未完整过滤主表版本的缺陷，不能把本入口视为完整时点保证。
+        adv 是此前20个交易日平均成交股数，不因目标时点固定而允许使用未来成交量。
         reference_nav、peak_nav 和 turnover_used 均为美元，后者只可提高已用换手预算。
         None 不构成检查豁免：必要事实缺失仍由统一风控拒绝。
         方法持锁写入意图、恢复事件并调用注入 Broker；超时返回 UNKNOWN，不能视为拒单。

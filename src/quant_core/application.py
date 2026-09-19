@@ -411,7 +411,11 @@ def run_demo(config: DemoConfig, output: Path) -> RunManifest:
 
 
 def replay_journal(store: SQLiteEventStore, journal: list[JournalEntry]) -> None:
-    """按连续事务序号重建新状态库；错误抛 ContractError，不触发券商提交。"""
+    """按连续事务序号重建传入的新状态库，不触发券商提交。
+
+    序号不连续或操作与载荷类型不匹配时抛 ContractError；存储方法产生的模型校验、
+    数据库及其他错误原样传播，已提交的较早操作不会随着后项失败一起回滚。
+    """
     # journal 是按入库先后排列的操作记录；payload 随 operation 分别是意图、订单状态、事件或行动。
     # 这些调用只重建传入 store；若后项失败，前面已经提交的事务仍保留，不是全日志一次回滚。
     for number, entry in enumerate(journal, start=1):

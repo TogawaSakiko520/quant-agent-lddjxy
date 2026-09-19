@@ -28,7 +28,8 @@ def test_trend_requires_three_sessions_and_never_changes_budget() -> None:
 def test_stale_missing_and_future_records_do_not_fake_normal_state() -> None:
     """缺日或末值过期返回UNKNOWN，未来输入不改变旧状态。"""
     snapshot, calendar = history([100.0] * 205)
-    # 删除一个交易日后不允许压缩历史。
+    # 同时裁去首条记录并删除倒数第5条：首日变化只缩短覆盖起点，内部缺日仍应触发UNKNOWN，
+    # 不能把缺口两侧的价格压缩成连续交易日。
     assert (
         assess_regime(
             snapshot.records[1:-5] + snapshot.records[-4:], snapshot.decision_time, calendar

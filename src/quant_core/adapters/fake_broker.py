@@ -51,7 +51,8 @@ class FakeBroker:
         self.config = config
         # 故障开关是测试驱动，不作为生产接口。
         self.connected = True
-        # 只对下一次实际接受的新单注入响应超时。
+        # 下一次新单处理结果落库后丢失响应，OPEN 或注入的 REJECTED 都可触发；
+        # 已有同键订单直接返回，不消耗这个内存开关。
         self.timeout_after_accept = False
         # 下一次新单可注入确定拒单。
         self.reject_next = False
@@ -159,7 +160,12 @@ class FakeBroker:
         )
 
     def submit(self, intent: OrderIntent) -> OrderRecord:
-        """幂等接受离线限价单；可注入受理后 TimeoutError，超时不回滚券商受理。"""
+        """幂等处理离线限价单，返回已保存的券商订单状态。
+
+        新单的 OPEN 或注入的 REJECTED 先落库，再按 timeout_after_accept 注入
+        TimeoutError；响应丢失不回滚该结果，不能仅凭超时判断受理或拒单。
+        已有同键同内容订单直接返回，不消耗拒单或超时开关；同键异内容抛 ContractError。
+        """
         self._check()
         if intent.account_id != self.config.account_id:
             raise ContractError("券商意图账号不匹配")
@@ -228,7 +234,7 @@ class FakeBroker:
 
         买入费用计入取得成本；部分卖出按原持仓比例释放成本，卖出费用只扣现金。
         可用现金同步本次现金差额，仅模拟即时结算。账户不符、超卖或买入现金不足抛
-        ContractError；返回快照构造时的校验错误仍传播，例如卖出费用使现金为负。
+        ContractError；构造待写入账户快照时的校验错误仍传播，例如卖出费用使现金为负。
         事务回滚由调用方的 _db 上下文负责。
         """
         # 直接读取券商事实，不调用内部 ledger。
@@ -436,6 +442,9 @@ class FakeBroker:
         拆股保留总成本，不支持产生碎股；股息按 action 中固定权益股数计算，
         不拿支付日持仓猜测权益。重复返回 False，首次提交账户与行动身份后返回 True；
         时点、质量、身份或碎股校验失败抛 ContractError，事务内失败不留下半次变动。
+        本方法不把行动加入 events() 的订单/成交流；若因此出现未同步的账户差异，
+        执行服务 recover 只会报告，不能自动补记行动。内部须独立取得并核验同一行动事实，
+        调用 store.apply_action(action, at) 入账后再恢复核对。
         """
         self._check()
         # 经济事件与信息到达都不能晚于当前注入处理时刻。

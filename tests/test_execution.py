@@ -510,6 +510,8 @@ def test_actual_sell_turnover_cannot_be_understated_by_limit_or_caller_zero(tmp_
     )
     # 实际以150美元卖出，现金成交额十五万美元而非限价估计十万美元。
     broker.fill("large-sale", quote().model_copy(update={"price": Decimal("150")}))
+    # 此时只更新了券商事实；下面 submit 会先恢复卖出事件到内账，再检查额外买单。
+    # 因此买单即使被拒绝，已恢复的卖出现金和实际换手仍保留，不随拒单回滚。
     # 故意给外部累计换手传0，也不能覆盖内部真实十五万美元。
     with pytest.raises(RiskBlocked, match="turnover_limit"):
         # 额外一股100美元买单会超过已消耗完整换手预算。

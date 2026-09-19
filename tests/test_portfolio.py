@@ -100,6 +100,8 @@ def test_pending_orders_netting_cash_and_execution_reserve() -> None:
     }
     account = account.model_copy(update={"as_of": execution_at})
     # 规划须容纳1%价格空间，而不是放宽90%上限。
+    # dict.fromkeys 用报价中的证券 ID 建立 ADV 输入：每只此前20日平均成交100万股，
+    # 这是流动性额度的股数口径，不是账户持仓或可用现金。
     intents = plan_orders(
         target,
         account,

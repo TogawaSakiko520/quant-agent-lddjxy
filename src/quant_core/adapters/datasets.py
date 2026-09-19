@@ -57,14 +57,17 @@ def generate_fixture(
         securities.append(seal_record(security))
         # 初始价格按身份变化，避免全部证券具有相同取整结果。
         previous_close = 50.0 + index * 3.0
+        # offset 是从零开始的交易日序号，不是经过的自然日数；周期分量沿这个序号变化。
         for offset, session in enumerate(sessions):
-            # 小幅隔夜变化提供独立开盘标签价格。
+            # overnight 是前收盘到本次开盘的小数收益，0.001 表示上涨 0.1%。
             overnight = rng.uniform(-0.001, 0.001)
             raw_open = round(previous_close * (1 + overnight), 6)
             # 固定周期市场分量展示趋势切换，不代表市场预测。
             market_component = 0.00025 + 0.0006 * math.sin(offset / 85)
             # 不同证券的波动和漂移为因子提供可区分样本。
             noise = rng.uniform(-1, 1) * (0.004 if is_benchmark else 0.004 + index * 0.0003)
+            # daily_return 在这里是开盘到收盘的小数收益，由市场分量、噪声和个股漂移相加；
+            # 不含上面的隔夜收益，不能当作前收盘到本收盘的完整日收益。
             daily_return = market_component + noise + (0 if is_benchmark else index * 0.000012)
             # 六位小数固定输入序列，业务金额另使用 Decimal。
             raw_close = round(raw_open * (1 + daily_return), 6)

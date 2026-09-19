@@ -80,7 +80,8 @@ def calculate_factors(snapshot: DataSnapshot, calendar: TradingCalendar) -> list
                             current / previous - 1.0
                             for previous, current in zip(values, values[1:], strict=False)
                         ]
-                        # stdev 使用 ddof=1；负号统一为越大越好。
+                        # stdev 计算样本标准差：60个收益的平方偏差和先除以60-1=59，再开方。
+                        # 乘 sqrt(252) 按一年252个交易日的演示约定年化；取负使波动越低值越大。
                         value = -stdev(returns) * math.sqrt(252)
                     reason = None
                 # 非有限或非正输入不能当作低波动信号。
