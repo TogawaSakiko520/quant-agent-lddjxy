@@ -15,7 +15,9 @@ quant-core 使用程序生成的合成行情，在本地演练选股、持仓规
 
 ## 环境要求与首次运行
 
-需要 **Python 3.12**（项目要求 `>=3.12,<3.13`）和 **uv**，当前验证使用 uv 0.12.5。uv 用于按 `uv.lock` 安装依赖并运行命令；首次安装需要可用包源，可能联网。没有 uv 或终端找不到命令时，先按[快速开始](docs/runbooks/quickstart.md#1-确认-uv-并安装锁定的依赖)检查并安装；该方式不修改全局 shell 配置。演示自身使用本地合成数据，不访问外部行情或券商。
+项目需要 **Python 3.12**（`>=3.12,<3.13`），可选择 uv 或 Conda 作为环境入口。uv 路线继续使用 `uv.lock`；Conda 创建独立 Python 环境，环境内的 pip 按同一锁文件导出的 `requirements.txt` 安装项目依赖。首次安装可能联网，演示自身使用本地合成数据，不访问外部行情或券商。
+
+下面是 uv 首次运行摘要，当前使用 uv 0.12.5。缺少工具时见[uv 安装步骤](docs/runbooks/quickstart.md#1-确认-uv-并安装锁定的依赖)；使用 Conda 的开发者直接从[Conda 首次安装](docs/runbooks/quickstart.md#conda-首次安装与环境选择)开始，不需要先安装 uv。两条路线的实际环境与限制见[兼容验证记录](docs/audit/conda-compatibility.md)。
 
 **macOS 是本仓库的主要本地开发环境。** 已在 macOS 26.5.1、Apple Silicon、Python 3.12.14 上完成独立虚拟环境重建与离线开发验收；具体证据和解释器来源见 [macOS 验证记录](docs/audit/macos-development.md)。Linux 的已有记录和 CI 定义继续保留，本轮未重新验证 Linux 或远端 CI；其他 macOS 版本、Intel Mac 和持续交易环境不在本次结论内。
 
@@ -42,7 +44,7 @@ uv run --offline --locked quant-core demo --output artifacts/demo
 
 ## 六个常用命令
 
-下表参数接在 `uv run --offline --locked quant-core` 后使用。`DIR`、`NEW_DIR` 和 `FILE` 表示需要替换的实际路径，`REV` 表示 Git 比较基线。
+下表参数接在 `uv run --offline --locked quant-core` 后使用；Conda 路线改用 `conda run -n quant-core-dev quant-core`，子命令和参数相同。`DIR`、`NEW_DIR` 和 `FILE` 表示需要替换的实际路径，`REV` 表示 Git 比较基线。
 
 | 子命令与参数 | 用途、主要输入输出 | 写入范围 |
 |---|---|---|
@@ -84,11 +86,13 @@ requirements.txt        从锁文件导出的运行与开发依赖，不手工�
 uv run --offline --locked quant-core check
 ```
 
+Conda 用户运行 `conda run -n quant-core-dev quant-core check`，仍执行同一套检查，不切换到仓库 `.venv`。
+
 它汇总治理检查、Ruff格式与规则检查、mypy类型检查和pytest测试。进行差异复核时，可使用 `check --base REV` 指定实际基线；不指定时不会完成敏感差异审计。
 
 首次体验与开发验收是不同步骤。开发完成后仍需按现有要求执行检查、在新目录演示与回放，并记录真实结果。参见[维护流程](docs/runbooks/ai-maintenance.md)和[根规则](AGENTS.md)，文档修改遵循[统一表达原则](docs/AGENTS.md#文档表达原则)。
 
-`requirements.txt` 为后续环境兼容保留精确依赖清单，uv 仍是主要工作流。它不包含本项目自身安装，不是 conda 环境文件；conda 兼容尚未验证。生成方法见[依赖维护说明](docs/runbooks/ai-maintenance.md#依赖声明锁文件与导出清单)。
+`requirements.txt` 是共同锁文件导出的运行与开发依赖清单，不是另一套手写版本，也不是完整 Conda 环境文件。它不包含本项目自身安装；生成方法见[依赖维护说明](docs/runbooks/ai-maintenance.md#依赖声明锁文件与导出清单)。
 
 ## 文档导航
 
@@ -100,3 +104,40 @@ uv run --offline --locked quant-core check
 | 查看状态 | [项目状态](PROJECT_STATE.md)、[变更记录](CHANGELOG.md) |
 
 完整的专题、需求、恢复和历史审计入口见[文档导航](docs/README.md)。
+
+## 拉取代码后如何更新环境
+
+以下命令在仓库根目录执行，用于把本地环境更新到仓库规定的依赖版本，不是主动升级到最新版本。仅改普通业务源码且依赖未变时，无需重新安装依赖。
+
+**uv：一条命令同步项目环境。**
+
+```bash
+uv sync --locked
+```
+
+它安装所需包、调整版本并清理项目环境中不再需要的额外包；不会修改共同锁文件。Python 准备和禁止自动下载解释器的方式见快速开始。
+
+**Conda：一条命令更新现有项目环境中的依赖。**
+
+```bash
+conda run -n quant-core-dev python -m pip install --require-hashes -r requirements.txt
+```
+
+`quant-core-dev` 是首次安装时创建的项目环境名；改过名称时替换它。已正确激活该环境后，可简写为 `python -m pip install --require-hashes -r requirements.txt`。命令会安装新增包或调整版本，满足要求的包通常保留，不必每次新建环境。哈希用于核对本次下载的包，不是重新检查全部已安装文件。
+
+普通 pip 安装不会自动卸载清单外的旧包。清单删除依赖、Python 更换或 Conda 基础包调整时，按[维护流程](docs/runbooks/ai-maintenance.md#两条路线的更新与重建)创建新环境验证，旧环境保留。不要用 `conda update --all`、`conda install pandas` 或自由升级的 pip 命令替代共同清单。
+
+**项目安装和开发检查是另外的步骤。** 首次安装或项目安装信息/命令入口变化时，Conda 用户还需运行 `conda run -n quant-core-dev python -m pip install --no-deps -e .`；这不是每次更新依赖都必须执行的命令。
+
+更新后按开发流程验证，安装成功不等于测试通过：
+
+```bash
+# uv 路线
+uv run --offline --locked quant-core check
+
+# Conda 路线
+conda run -n quant-core-dev python -m pip check
+conda run -n quant-core-dev quant-core check
+```
+
+`pip check` 检查依赖冲突，不证明没有残留包。新增、删除或升级共同依赖必须更新声明、锁和导出清单，并经过两条路线验证；不能由两位开发者各自维护不同版本。

@@ -1,5 +1,13 @@
 # 变更记录
 
+## 第三阶段：uv 与 Conda 共用依赖（2026-09-19）
+
+保留原uv路线，验证Conda创建Python3.12环境、环境内pip按uv.lock导出的requirements安装项目库，并可编辑安装同一源码。README末尾明确各一条日常更新命令，把首次安装、依赖更新和开发检查分开；普通新增/版本更新不必重建，删除依赖或调整Python/基础包时采用新环境验证。快速开始、维护手册、根规则入口限定、导航和QC-013/015映射同步；没有新增第二套手写依赖或Conda CI。
+
+原uv检查133 passed/20 warnings/55.04秒，新Conda检查133 passed/20 warnings/58.58秒；两条路线demo/validate/replay均成功，回放五项一致，跨环境10份业务JSON精确一致。同一Conda环境重复单命令更新约0.8秒且不重装，requirements两次导出内容与起点相同。未改业务源码、测试、配置、依赖声明/锁、Schema、检查器或CI。
+
+工具安装与解释器来源、SQLite差异、隔离构建依赖和实际失败见[兼容验收记录](docs/audit/conda-compatibility.md)。官方Miniforge固定版本安装在忽略目录，用户Conda登记文件创建如实记录；shell/全局配置和其他项目环境未改。未宣称其他平台、实际依赖升级删除或生产运行已验收，未提交或推送。
+
 ## macOS 开发环境与依赖清单（2026-09-19）
 
 确认macOS26.5.1/Apple Silicon/Python3.12.14组合可用于当前仓库的日常离线开发，README声明macOS为主要本地开发环境，保留Linux CI及明确验证边界。缺少持久uv时已使用官方安装器安装0.12.5至用户目录，不修改shell配置。保留现有 `.venv`，使用原锁文件与已有解释器/缓存重建独立环境，不升级项目依赖。

@@ -4,7 +4,7 @@
 
 ## 运行前提
 
-准备好仓库源码和 Python 3.12；uv 的检查与安装见下一节。下面项目命令都在**仓库根目录**执行，也就是包含 `pyproject.toml` 和 `uv.lock` 的目录。
+准备好仓库源码，选择一种环境入口：uv 使用项目 `.venv`；Conda 使用项目专用环境。两条路线都要求 Python 3.12，运行同一套代码。uv 用户读第1节；Conda 用户直接读[Conda首次安装](#conda-首次安装与环境选择)，无需安装uv。下面项目命令都在**仓库根目录**执行，也就是包含 `pyproject.toml` 和 `uv.lock` 的目录。
 
 macOS 是主要本地开发环境，具体系统、架构、解释器和验证边界见 [macOS 验证记录](../audit/macos-development.md)。Linux CI 定义继续保留；本轮没有重新执行 Linux 或远端 CI。当前账户锁使用 `fcntl.flock` 文件锁，协调同一台机器上、同一账户且遵守该锁机制的程序，避免同时执行；它不加密账户，也不能协调另一台机器或控制券商端人工操作。
 
@@ -54,13 +54,52 @@ uv sync --offline --locked --check
 
 首次安装可能需要从包源下载依赖。若已有 Python 3.12 未被找到，可在同步命令追加 `--python /实际路径/python3.12`，不要修改系统 Python。核对版本应为 3.12.x，最后一条命令只检查环境是否与项目同步；未通过时先处理原因。安装完成后，下文命令使用 `--offline --locked`，按现有锁文件在本地环境运行；它不会在运行时下载缺失的依赖。
 
-日常仍由 uv 管理本仓库的 `.venv`。根 [requirements.txt](../../requirements.txt) 是锁文件导出的运行与开发依赖清单，不包含本项目自身安装，也不是 conda 环境文件。导出和更新方法集中在[维护流程](ai-maintenance.md#依赖声明锁文件与导出清单)；conda 兼容尚未验证。
+这一路线仍由 uv 管理本仓库的 `.venv`。根 [requirements.txt](../../requirements.txt) 是锁文件导出的运行与开发依赖清单，供下一节的 Conda 路线使用，不包含本项目自身安装，也不是完整 Conda 环境文件。
+
+## Conda 首次安装与环境选择
+
+需要已有可用的 Conda。可使用已有发行版；没有工具时按 [Miniforge 官方说明](https://github.com/conda-forge/miniforge#install)安装适合本机架构的版本。本仓库实际验证的工具与平台见[兼容记录](../audit/conda-compatibility.md)，不把所有发行版或架构都视为已测试。以下不需要修改全局 `.condarc`、执行 `conda init` 或进入base安装项目库。
+
+先确认 `conda --version`。创建尚不存在的专用环境；`quant-core-dev` 是示例名称，有同名环境时换新名称，并替换后续命令中的名称。
+
+```bash
+conda create -n quant-core-dev --override-channels -c conda-forge --no-default-packages python=3.12 pip
+conda run -n quant-core-dev python -c "import sys; print(sys.executable); print(sys.version)"
+conda run -n quant-core-dev python -m pip --version
+```
+
+输出应指向新 Conda 环境，Python 为3.12.x；不能指向base或仓库 `.venv`。Conda负责Python、pip及其必要基础包，项目的NumPy、pandas等库统一交给环境内的pip，不再用 `conda install` 或 `conda update` 安装/更新同一组项目库。
+
+先安装共同清单，再安装本仓库：
+
+```bash
+conda run -n quant-core-dev python -m pip install --require-hashes -r requirements.txt
+conda run -n quant-core-dev python -m pip install --no-deps -e .
+conda run -n quant-core-dev python -m pip check
+conda run -n quant-core-dev quant-core --help
+```
+
+第一条按导出清单安装运行和开发依赖，核对本次下载包的哈希；已满足的包不因此逐文件重新校验。第二条把本仓库以可编辑方式安装并注册CLI：之后修改源码直接生效，不需要为每次普通代码编辑重新安装。`--no-deps` 避免重新解析项目依赖，但构建隔离仍可能按 `pyproject.toml` 的build-system要求下载构建工具；这些工具并未由当前 `uv.lock` 完整锁定，实际版本记录于验收证据。
+
+`pip check` 只检查依赖关系，不证明清单之外没有旧包。安装可能联网；以下业务命令使用本地合成数据，不需要外部账户。Conda运行时没有uv的 `--offline` 参数，也不由运行命令自动同步依赖；需要先完成安装。
+
+使用 `conda run -n quant-core-dev …` 无需激活环境，适合避免解释器混用。已有Conda shell支持时，也可 `conda activate quant-core-dev` 后直接使用该环境的 `python` 和 `quant-core`；在编辑器中选择上面打印出的Python路径。不要同时激活仓库 `.venv`，也不要把 `uv run` 默认当成已激活Conda环境的运行入口：uv项目命令仍以项目环境为目标；`uv pip` 的显式解释器选择是另一套接口，本手册的Conda路线不需要它。
+
+日常依赖更新只需重新执行第一条安装命令，不必重复创建环境；项目安装信息或命令入口变化时才重做可编辑安装。删除依赖与更换Python等情况见[更新与重建](ai-maintenance.md#两条路线的更新与重建)。
 
 ## 2. 运行一次演示
 
 ```bash
 uv run --offline --locked quant-core demo --output artifacts/demo
 ```
+
+Conda路线使用：
+
+```bash
+conda run -n quant-core-dev quant-core demo --output artifacts/demo
+```
+
+两者选其一；若要比较两套环境，必须使用不同的新输出目录，并对应修改后续路径。
 
 这条命令生成合成历史行情，按两个选股指标（因子）评分：动量反映过去一段时间的涨跌表现，低波动描述价格变化的平稳程度。程序据此计算希望持有的股数，检查交易限制，再通过 FakeBroker 模拟下单、成交、记账和核对。
 
@@ -84,6 +123,8 @@ uv run --offline --locked quant-core demo --output artifacts/demo
 uv run --offline --locked quant-core validate --run-dir artifacts/demo
 ```
 
+Conda路线使用 `conda run -n quant-core-dev quant-core validate --run-dir artifacts/demo`。
+
 `validate` 核对文件摘要、原始输入、订单与账户记录，并重新计算因子和目标。文件摘要也称哈希，是由内容计算的指纹，用于发现内容变化，不是加密或数据来源可靠性的证明。成功时输出 `status: validated`。它会创建并清理临时数据库用于核对，但不修改 `artifacts/demo` 中的原文件。
 
 ## 5. 在新目录回放
@@ -91,6 +132,8 @@ uv run --offline --locked quant-core validate --run-dir artifacts/demo
 ```bash
 uv run --offline --locked quant-core replay --run-dir artifacts/demo --output artifacts/replay
 ```
+
+Conda路线使用 `conda run -n quant-core-dev quant-core replay --run-dir artifacts/demo --output artifacts/replay`。
 
 `replay` 先校验源运行，再从保存的初始账户和操作日志重建内部账本，在新目录保存回放结果。它不把原订单重新发送给券商。成功时输出 `status: replayed`。
 
@@ -104,6 +147,8 @@ uv run --offline --locked quant-core replay --run-dir artifacts/demo --output ar
 uv run --offline --locked quant-core research --run-dir artifacts/demo
 ```
 
+Conda路线将前缀替换为 `conda run -n quant-core-dev quant-core`，后面的research参数不变。
+
 结果追加到 `artifacts/demo/research/experiment-0001` 等递增编号目录，不覆盖原交易文件。研究包含因子覆盖率、排名与后续收益的相关性等统计；它不是扣除成本后的完整策略业绩，也不提供完整交易净值曲线。研究口径和时间隔离方式见[因子研究说明](../research.md)。
 
 从已保存记录重新生成文字报告：
@@ -111,6 +156,8 @@ uv run --offline --locked quant-core research --run-dir artifacts/demo
 ```bash
 uv run --offline --locked quant-core report --run-dir artifacts/demo
 ```
+
+Conda路线同样替换前缀，后面的report参数不变。
 
 `report` 先校验运行，再将 Markdown 输出到终端的标准输出，不覆盖原 `report.md`。校验阶段同样会使用临时数据库，不修改源运行文件。
 
@@ -142,13 +189,15 @@ uv run --offline --locked quant-core report --run-dir artifacts/demo
 uv run --offline --locked quant-core check
 ```
 
+Conda用户运行 `conda run -n quant-core-dev quant-core check`。它使用当前Conda解释器启动同一套检查；开发依赖已包含在requirements清单中。日常更新与检查分开列于[README末尾](../../README.md#拉取代码后如何更新环境)。
+
 `check` 执行仓库治理检查、Ruff 规则与格式检查、mypy 类型检查和 pytest 测试。它不自动修复源码或升级依赖，但检查工具可能写缓存，测试会创建临时文件和数据库；它不是“完全不写文件”的命令。此入口需要源码仓库及开发依赖，不能只用安装后的业务包替代。
 
 需要查看相对某次提交的敏感变更提示时，使用 `check --base <已有的Git提交或引用>`。该提示供人工复核，不等于自动批准修改。维护规则见[维护流程](ai-maintenance.md)。
 
 ## 六个命令与参数
 
-下表中的参数接在 `uv run --offline --locked quant-core` 后。相对路径仍以仓库根目录为起点。
+下表中的参数接在 `uv run --offline --locked quant-core` 或 `conda run -n quant-core-dev quant-core` 后。相对路径仍以仓库根目录为起点。
 
 | 命令 | 必需参数 | 可选参数 |
 |---|---|---|
@@ -161,7 +210,7 @@ uv run --offline --locked quant-core check
 
 ## 失败时如何处理
 
-以下是 `quant-core` 的退出码；如果命令尚未启动、错误来自 `uv`，先处理环境或依赖问题。
+以下是 `quant-core` 的退出码；如果命令尚未启动、错误来自uv、Conda或pip，先处理环境或依赖问题。
 
 | 退出码 | 含义 | 处理方式 |
 |---|---|---|
@@ -170,6 +219,6 @@ uv run --offline --locked quant-core check
 | `2` | 参数或输入不符合数据格式/约束，或输出路径已存在 | 核对参数和路径；已有运行目录换新名称，不删除旧记录。 |
 | `3` | 风险检查或对账阻断 | 查看原因与已有订单、账户记录，按[故障与恢复手册](recovery.md)核对。 |
 
-依赖未装齐时，先在可访问包源的环境完成 `uv sync --locked`；不要通过升级依赖或改锁文件绕过错误。运行失败可能已经写下部分记录，应保留输出目录和错误信息。未知订单或对账差异不能靠删数据库、改风险参数或修改原文件消除。
+依赖未装齐时，uv路线先执行 `uv sync --locked`；Conda路线先在明确的项目环境中按requirements安装，再检查解释器与CLI路径。不要通过升级依赖或改锁文件绕过错误。运行失败可能已经写下部分记录，应保留输出目录和错误信息。未知订单或对账差异不能靠删数据库、改风险参数或修改原文件消除。
 
 需要复制或恢复记录时，使用[备份与恢复手册](backups-migrations.md)。平台验证和已知限制以[项目状态](../../PROJECT_STATE.md)为准；更多说明见[文档导航](../README.md)。

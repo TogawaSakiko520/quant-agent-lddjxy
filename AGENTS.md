@@ -29,7 +29,7 @@
 
 ## 协作与验证
 
-按文件所有权并行，变更公共契约前通知其他作者。使用 uv.lock 固定依赖；日常运行使用 uv --locked。完成后实际运行 quant-core check 与演示/回放命令，记录结果和失败；未执行标为未验证。不得手工伪造锁文件、报告或测试通过记录。
+按文件所有权并行，变更公共契约前通知其他作者。项目依赖使用 uv.lock 固定；uv 路线使用 uv --locked，Conda 路线在项目专用 Python 环境中按锁文件导出的 requirements.txt 安装，再从该环境运行命令，具体步骤见 [快速开始](docs/runbooks/quickstart.md)。requirements.txt 不手工维护第二套版本，不能用 conda update 或未受约束的 pip 升级替代共同锁定流程。完成后实际运行 quant-core check 与演示/回放命令，记录结果和失败；未执行标为未验证。不得手工伪造锁文件、报告或测试通过记录。
 
 ## 按业务语义分层解释（QC-014，唯一主规范）
 

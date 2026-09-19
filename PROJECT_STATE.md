@@ -2,6 +2,22 @@
 
 本文件是交接事实源；聊天中的承诺和计划不等同于已实现能力。更新日期：2026-09-19。
 
+## 当前阶段：uv 与 Conda 双入口兼容完成（2026-09-19）
+
+起始工作区干净，HEAD=`78e5ed7ec5167f0712a5f796a5ef1fa1830990d3`；119文件快照、摘要、Git状态和环境清单保存在新的 `artifacts/conda-compatibility-20260919/`。本轮不重复macOS迁移，以QC-013/015关联环境入口和维护说明；详细命令、版本与限制见 [双入口兼容记录](docs/audit/conda-compatibility.md)。
+
+- 保留uv0.12.5及原 `.venv`。新增Conda路线：Conda创建Python3.12环境，目标环境的pip按共同requirements安装库，再以 `--no-deps -e .` 安装项目；不要求Conda用户日常安装uv，不用Conda覆盖同组项目库。
+- 本机没有Conda，固定下载并校验官方Miniforge26.7.2-0，在忽略目录内安装工具并创建 `envs/quant-core-dev`。实际Conda26.7.2、项目Python3.12.14、pip26.2.1；与uv的28项适用外部依赖及项目版本一致，CLI、源码导入和检查子进程均指向正确环境。SQLite为3.53.4，对比uv的3.53.1，未声称底层环境完全相同。
+- README末尾明确各一条日常更新命令：`uv sync --locked`；`conda run -n quant-core-dev python -m pip install --require-hashes -r requirements.txt`。首次项目安装和开发检查分开；普通依赖更新不必重建，删除依赖或改变Python/基础包时按标准新环境验证。
+- Conda首次安装、可编辑安装、pip check及CLI入口检查均退出0。在同一环境实际重复执行单命令更新，退出0、约0.8秒，已满足包保留、环境非字节码文件不变。预装packaging符合锁要求，pip没有覆盖原Conda基础文件；构建隔离工具版本单独记录，不冒称由uv.lock完整锁定。
+- 原uv路线实际同步、完整check、demo、validate、replay均退出0；**133 passed、20 warnings、55.04秒**。新Conda路线完整check及同样三条业务命令均退出0；**133 passed、20 warnings、58.58秒**。两边回放五项true，跨环境10份业务JSON完整结果精确相同；环境差异单列。
+- requirements两次真实导出均与起点字节一致，无需产生内容变更；项目声明、锁、源码、源码注释、测试、策略配置、Schema、检查器和Linux CI保持原样。根规则只调整环境入口限定，需求映射只追加QC-013/015文档；新清单记录真实源码指纹与dirty=true。
+- 非作者独立复核完成，无阻塞或待修正项，记录在证据目录的 `independent-review.md`。最终范围/保护文件、83项链接与锚点、11条业务命令示例、静态治理和 `git diff --check` 均通过；原uv环境及本轮Conda基础文件未被覆盖，历史正文保留。
+
+初次获取发布信息DNS失败（退出6）、初次安装因 `~/.conda` 权限失败（退出1），取得必要权限后按原版本完成，失败日志保留。安装器新建用户Conda登记文件（核对为空）；shell和全局 `.condarc` 未改，没有向既有base或其他项目装包。第三方弃用警告与沙箱CPU信息诊断保留，没有为通过而升级依赖或弱化检查。
+
+未验证其他Mac架构/版本、其他Conda发行版、Linux本轮复测、远端CI、research/report跨环境独立CLI、真实依赖升级/删除/迁移及持续交易。业务缺陷F01/F02与碎股缺口未在本轮修复。完成后停止，不提交、推送、接入Alpaca或自动继续下一阶段。以下旧阶段正文保留，按当时基线解释。
+
 ## 当前阶段：macOS 开发环境核验完成（2026-09-19）
 
 开工工作区干净，HEAD=`fadd4e0f8c1a078cc2d9232b08b76a682afc5cf7`；117文件快照、摘要及Git状态保存在新的 `artifacts/macos-validation-20260919/`。本轮关联QC-008/010/011/012/013/015的环境与验证证据，不改变业务行为或验收规则。详细环境、命令、警告与限制集中在 [macOS 开发环境核验](docs/audit/macos-development.md)。

@@ -41,6 +41,7 @@
 |---|---|
 | 当前完成了什么、哪些命令实际验证过 | [项目状态](../PROJECT_STATE.md)。历史记录按当时的代码和环境解释。 |
 | macOS 能否用于本地开发，具体测过哪些环境与命令 | [macOS 开发环境核验](audit/macos-development.md)。 |
+| uv和Conda是否使用同一套项目依赖，哪些差异实际验证过 | [双入口兼容记录](audit/conda-compatibility.md)；日常命令见[README末尾](../README.md#拉取代码后如何更新环境)。 |
 | 仓库有哪些变更 | [变更日志](../CHANGELOG.md)。 |
 | 有哪些未解决假设或外部条件 | [假设与阻塞](../ASSUMPTIONS.md)。 |
 | 接入外部模拟交易前还缺什么 | [上线阻塞清单](audit/launch-blockers.md)、[准备审计](audit/readiness.md)。 |
