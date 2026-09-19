@@ -3,6 +3,8 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+import pytest
+
 from quant_core.contracts import (
     AccountSnapshot,
     OrderIntent,
@@ -14,6 +16,47 @@ from quant_core.contracts import (
 from quant_core.monitoring import assess_health
 
 AT = datetime(2023, 11, 27, 14, 30, tzinfo=UTC)
+
+
+@pytest.mark.parametrize("with_target", [False, True])
+def test_target_external_positions_are_reported_without_mutation(with_target: bool) -> None:
+    """空目标也必须报告一股旧仓；目标内外偏差同时保留，监控不写账户或补单。"""
+    account = AccountSnapshot(
+        as_of=AT,
+        cash=Decimal("1000"),
+        available_cash=Decimal("1000"),
+        positions={"A": 1, "ZERO": 0},
+    )
+    target = TargetPortfolio(
+        decision_id="monitor-union",
+        as_of=AT,
+        nav=Decimal("1000"),
+        positions=[
+            TargetPosition(
+                security_id="B", sector="tech", weight=0.01, quantity=1, reason="固定缺仓"
+            )
+        ]
+        if with_target
+        else [],
+        cash_weight=0.99 if with_target else 1.0,
+    )
+    before = account.model_dump()
+    alerts = assess_health(
+        account,
+        target,
+        ReconciliationResult(as_of=AT, matched=True, differences=[]),
+        [],
+        at=AT,
+        heartbeat_at=AT,
+        provider_at=AT,
+        data_good=True,
+        factor_coverage=1.0,
+        completed_steps={"data", "factors", "portfolio", "execution", "reconciliation"},
+    )
+    assert [(item.code, item.message) for item in alerts] == [
+        ("TARGET_DEVIATION", "目标尚未达到：A,B" if with_target else "目标尚未达到：A")
+    ]
+    assert account.model_dump() == before
 
 
 def test_health_preserves_all_independent_failure_reasons() -> None:

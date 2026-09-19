@@ -1,5 +1,7 @@
 """横截面百分位与固定等权评分；排名不是收益预测，不访问订单或券商。"""
 
+import math
+
 from quant_core.contracts import (
     ContractError,
     DataSnapshot,
@@ -8,7 +10,7 @@ from quant_core.contracts import (
     SignalSet,
     canonical_hash,
 )
-from quant_core.factors import DEFINITIONS
+from quant_core.factors import DEFINITIONS, MA_DEFINITIONS
 from quant_core.universe import qualified_universe
 
 
@@ -21,6 +23,13 @@ def score_factors(snapshot: DataSnapshot, factors: list[FactorValue]) -> SignalS
     """
     # universe 用稳定证券 ID 索引合格主表，既决定评分资格，也向输出 Score 提供行业。
     universe = {security.security_id: security for security in qualified_universe(snapshot)}
+    # 原双因子仍要求真实行业；行业未知只由独立均线策略的保守风险口径处理。
+    missing_sector = {identity for identity, security in universe.items() if not security.sector}
+    universe = {
+        identity: security
+        for identity, security in universe.items()
+        if identity not in missing_sector
+    }
     # 因子 ID 顺序固定，不允许外来因子改变权重。
     required = [definition.factor_id for definition in DEFINITIONS]
     # values 的形状是 {证券 ID: {因子 ID: 原始因子值}}；数值仍是动量/低波动原值，
@@ -32,6 +41,7 @@ def score_factors(snapshot: DataSnapshot, factors: list[FactorValue]) -> SignalS
         for security in snapshot.securities
         if security.asset_type == "common_stock" and security.security_id not in universe
     }
+    excluded.update({identity: "missing_sector" for identity in missing_sector})
     # 重复输入即使同值也不能意外提高权重。
     seen: set[tuple[str, str]] = set()
     # 校验时间与版本后才接受因子。
@@ -112,6 +122,104 @@ def score_factors(snapshot: DataSnapshot, factors: list[FactorValue]) -> SignalS
         decision_id=decision_id,
         decision_time=snapshot.decision_time,
         snapshot_id=snapshot.snapshot_id,
+        scores=scores,
+        excluded=excluded,
+    )
+
+
+def score_ma_factors(snapshot: DataSnapshot, factors: list[FactorValue]) -> SignalSet:
+    """将完整均线证据中的正趋势强度转换为单因子百分位信号。
+
+    MA5、MA20 仅保留在因子文件供解释；只有 ma_trend 参与评分且权重为 100%。
+    先排除强度不为正的股票，再按合格样本平均并列名次评分，单只得 1。
+    未知行业保持 None，由组合与风控按最坏行业占用处理。外来身份、因子版本、
+    重复因子或快照时点不符抛 ContractError，不把非法数据静默当成有效信号。
+    """
+    universe = {security.security_id: security for security in qualified_universe(snapshot)}
+    identities = {security.security_id for security in snapshot.securities}
+    if len(identities) != len(snapshot.securities):
+        raise ContractError("均线评分证券身份重复")
+    required = {definition.factor_id: definition.version for definition in MA_DEFINITIONS}
+    values: dict[str, dict[str, float]] = {}
+    excluded = {
+        security.security_id: "not_eligible"
+        for security in snapshot.securities
+        if security.asset_type == "common_stock" and security.security_id not in universe
+    }
+    seen: set[tuple[str, str]] = set()
+    for factor in factors:
+        if (
+            factor.snapshot_id != snapshot.snapshot_id
+            or factor.decision_time != snapshot.decision_time
+        ):
+            raise ContractError("因子快照或时点不一致")
+        if factor.security_id not in identities:
+            raise ContractError("均线因子证券身份未知")
+        if required.get(factor.factor_id) != factor.factor_version:
+            raise ContractError("未知均线因子或版本")
+        key = (factor.security_id, factor.factor_id)
+        if key in seen:
+            raise ContractError("重复因子结果")
+        seen.add(key)
+        if factor.security_id not in universe:
+            continue
+        if factor.value is None or factor.reason is not None:
+            excluded[factor.security_id] = factor.reason or "missing_factor"
+        else:
+            # 每证券收集三个解释项；任何一项缺失均不能仅凭趋势值放行。
+            values.setdefault(factor.security_id, {})[factor.factor_id] = factor.value
+    eligible: list[str] = []
+    for identity in universe:
+        indicators = values.get(identity, {})
+        if len(indicators) != len(required):
+            excluded.setdefault(identity, "missing_factor")
+        elif indicators["ma5"] <= 0 or indicators["ma20"] <= 0:
+            excluded[identity] = "invalid_price"
+        elif not math.isclose(
+            indicators["ma_trend"],
+            indicators["ma5"] / indicators["ma20"] - 1,
+            rel_tol=1e-12,
+            abs_tol=1e-15,
+        ):
+            # 仅容忍同一算式序列化后的浮点误差，不覆盖原值；排名并列仍使用精确值。
+            raise ContractError("均线与趋势强度不一致")
+        elif indicators["ma5"] <= indicators["ma20"] or indicators["ma_trend"] <= 0:
+            excluded[identity] = "non_positive_trend"
+        else:
+            eligible.append(identity)
+    # 升序零基名次用于百分位；并列只依据精确强度，不引入额外浮点容差。
+    ordered = sorted(eligible, key=lambda identity: (values[identity]["ma_trend"], identity))
+    percentiles: dict[str, float] = {}
+    index = 0
+    while index < len(ordered):
+        end = index + 1
+        while (
+            end < len(ordered)
+            and values[ordered[end]]["ma_trend"] == values[ordered[index]]["ma_trend"]
+        ):
+            end += 1
+        percentile = 1.0 if len(ordered) == 1 else (index + end - 1) / 2 / (len(ordered) - 1)
+        for identity in ordered[index:end]:
+            percentiles[identity] = percentile
+        index = end
+    # 降序按实际强度排列；同强度按稳定 ID，输出百分位与此排序保持一致。
+    scores = [
+        Score(
+            security_id=identity,
+            sector=universe[identity].sector,
+            components={"ma_trend": percentiles[identity]},
+            value=percentiles[identity],
+        )
+        for identity in sorted(
+            eligible, key=lambda identity: (-values[identity]["ma_trend"], identity)
+        )
+    ]
+    version = "ma-trend-1.0.0"
+    return SignalSet(
+        decision_id=canonical_hash({"snapshot_id": snapshot.snapshot_id, "strategy": version}),
+        decision_time=snapshot.decision_time,
+        snapshot_id=snapshot.snapshot_id,
+        strategy_version=version,
         scores=scores,
         excluded=excluded,
     )

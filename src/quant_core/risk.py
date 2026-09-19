@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -10,16 +10,25 @@ from zoneinfo import ZoneInfo
 from quant_core.contracts import (
     AccountSnapshot,
     ContractError,
-    DemoConfig,
     OrderIntent,
     OrderRecord,
+    PaperConfig,
+    PaperQueueTestContext,
     Quote,
     RiskDecision,
     SecurityRecord,
+    StrategyConfig,
     TargetPortfolio,
     TradingCalendar,
 )
-from quant_core.portfolio import ACTIVE_STATUSES, account_nav, order_fee
+from quant_core.portfolio import (
+    ACTIVE_STATUSES,
+    account_nav,
+    order_fee,
+    position_limit,
+    resolve_security_records,
+    sector_exposure_peak,
+)
 
 
 def assess_operation(
@@ -48,14 +57,95 @@ def assess_operation(
     )
 
 
+def _queue_test_checks(
+    intent: OrderIntent,
+    account: AccountSnapshot,
+    orders: list[OrderRecord],
+    quotes: dict[str, Quote],
+    config: StrategyConfig,
+    now: datetime,
+    calendar: TradingCalendar,
+    context: PaperQueueTestContext,
+) -> list[str]:
+    """验证休市单股测试的封闭边界，不替代共用账户、费用和风险计算。"""
+    reasons: list[str] = []
+    if not isinstance(config, PaperConfig) or config.strategy != "ma-trend":
+        reasons.append("queue_test_requires_paper_ma")
+    if (
+        context.account_id != account.account_id
+        or context.account_id != intent.account_id
+        or context.decision_id != intent.decision_id
+        or context.security_id != intent.security_id
+        or context.client_order_id != intent.client_order_id
+        or context.purpose != "paper_queue_test"
+        or intent.strategy_version != "ma-trend-1.0.0"
+    ):
+        reasons.append("queue_test_identity_mismatch")
+    # 只从已批准MA目标缩量为一股；500美元含费用是额外上界，原风险更严时仍优先。
+    if (
+        intent.side != "BUY"
+        or intent.quantity != 1
+        or intent.limit_price + intent.reserved_fee > Decimal("500")
+    ):
+        reasons.append("queue_test_single_share_or_amount_limit")
+    if any(account.positions.values()) or any(
+        row.intent.client_order_id != intent.client_order_id for row in orders
+    ):
+        reasons.append("queue_test_requires_flat_single_order")
+    # 当前券商时钟须真实新鲜；参考日线保留其真实收盘时间，不能将日期改成当前。
+    if (
+        context.remote_clock_at > now
+        or (now - context.remote_clock_at).total_seconds() > config.quote_max_age_seconds
+    ):
+        reasons.append("queue_test_stale_or_future_remote_clock")
+    if context.remote_is_open is not False or calendar.is_open(now):
+        reasons.append("queue_test_requires_closed_market")
+    if (
+        now < intent.created_at
+        or intent.eligible_at != context.next_open
+        or context.next_open - now < timedelta(minutes=15)
+    ):
+        reasons.append("queue_test_opening_buffer_or_eligibility")
+    if not context.reference_close_at <= context.reference_observed_at <= now:
+        reasons.append("queue_test_reference_observation_time")
+    try:
+        market_day = now.astimezone(ZoneInfo("America/New_York")).date()
+        completed = [
+            day
+            for day in calendar.sessions(context.reference_session, market_day)
+            if calendar.close_at(day) <= now
+        ]
+        next_session = calendar.next_session(context.reference_session)
+        if (
+            not completed
+            or completed[-1] != context.reference_session
+            or calendar.close_at(context.reference_session) != context.reference_close_at
+            or calendar.open_at(next_session) != context.next_open
+        ):
+            reasons.append("queue_test_not_latest_completed_session")
+    except ValueError:
+        reasons.append("queue_test_calendar_coverage")
+    quote = quotes.get(intent.security_id)
+    if (
+        set(quotes) != {intent.security_id}
+        or quote is None
+        or quote.price != context.reference_close
+        or quote.at != context.reference_close_at
+        or intent.limit_price > context.reference_close
+    ):
+        reasons.append("queue_test_reference_price_mismatch")
+    return reasons
+
+
 def _hard_checks(
     intent: OrderIntent,
     account: AccountSnapshot,
     open_orders: list[OrderRecord],
     quotes: dict[str, Quote],
-    config: DemoConfig,
+    config: StrategyConfig,
     now: datetime,
     calendar: TradingCalendar,
+    queue_context: PaperQueueTestContext | None = None,
 ) -> list[str]:
     """收集新增和减仓共用的账户、时段、原始报价及可卖数量阻断原因。"""
     reasons: list[str] = []
@@ -66,8 +156,17 @@ def _hard_checks(
     if account.as_of > now or (now - account.as_of).total_seconds() > config.quote_max_age_seconds:
         reasons.append("stale_or_future_account")
     # 只有常规时段且达到订单资格时刻才可执行。
-    if now < intent.eligible_at or now < intent.created_at or not calendar.is_open(now):
-        reasons.append("outside_execution_session")
+    if queue_context is None:
+        if now < intent.eligible_at or now < intent.created_at or not calendar.is_open(now):
+            reasons.append("outside_execution_session")
+    else:
+        # 排队测试只允许在真实休市时提前递交；开盘资格时刻仍保存未来真实开盘，
+        # 完整的来源、时间和单股限制由独立检查负责，普通入口不能注入这个上下文。
+        reasons.extend(
+            _queue_test_checks(
+                intent, account, open_orders, quotes, config, now, calendar, queue_context
+            )
+        )
     # others 保留除本 client_order_id 外的历史订单（包括终态）；后续按活动状态
     # 扣可卖量。当前意图可能已落盘，因此必须先排除自身，避免一张订单扣两次。
     others = [
@@ -83,13 +182,15 @@ def _hard_checks(
     if quote is None:
         reasons.append("missing_quote")
     else:
-        if quote.at > now or (now - quote.at).total_seconds() > config.quote_max_age_seconds:
-            reasons.append("stale_or_future_quote")
+        if queue_context is None:
+            if quote.at > now or (now - quote.at).total_seconds() > config.quote_max_age_seconds:
+                reasons.append("stale_or_future_quote")
         if not quote.tradable:
             reasons.append("untradable_quote")
         # 限价必须覆盖当前报价，离线示例不猜测未来穿价。
-        if (intent.side == "BUY" and quote.price > intent.limit_price) or (
-            intent.side == "SELL" and quote.price < intent.limit_price
+        if queue_context is None and (
+            (intent.side == "BUY" and quote.price > intent.limit_price)
+            or (intent.side == "SELL" and quote.price < intent.limit_price)
         ):
             reasons.append("quote_outside_limit")
     # 负持仓属于当前长仓契约不支持的账户状态。
@@ -125,7 +226,7 @@ def assess_reduce(
     account: AccountSnapshot,
     open_orders: list[OrderRecord],
     quotes: dict[str, Quote],
-    config: DemoConfig,
+    config: StrategyConfig,
     now: datetime,
     calendar: TradingCalendar,
     *,
@@ -144,12 +245,12 @@ def assess_reduce(
     )
 
 
-def assess_order(
+def _assess_order(
     intent: OrderIntent,
     account: AccountSnapshot,
     open_orders: list[OrderRecord],
     quotes: dict[str, Quote],
-    config: DemoConfig,
+    config: StrategyConfig,
     now: datetime,
     calendar: TradingCalendar,
     *,
@@ -161,20 +262,24 @@ def assess_order(
     security_records: list[SecurityRecord] | None = None,
     adv: dict[str, float] | None = None,
     turnover_used: Decimal | None = None,
+    queue_context: PaperQueueTestContext | None = None,
 ) -> RiskDecision:
     """核验正常策略订单的目标、预算和交易资格，返回允许结论及拒绝原因。
 
     now 为注入的 UTC 执行时刻，报价必须是新鲜原始价格。reference_nav 是日内
     损失基线、peak_nav 是回撤高点，金额均为美元且正常提交要求正值。target
     提供批准目标与换手分母；已有成交时 turnover_used 必须给出真实成交总额。
-    adv 是此前 20 日平均成交股数，security_records 应由调用方完成历史版本选择。
+    adv 是此前 20 日平均成交股数，security_records 在本函数按执行时点选择主表；
+    全部实际持仓、挂买余量和新买单都必须有唯一有效且质量合格的主表。
+    双因子要求明确行业；MA 允许 None，但全部未知金额须加在每个已知行业上限中。
     估值 ContractError 转为拒绝原因，函数不写账户也不发单。
 
-    本函数仅对当前买入证券的交易资格筛主表时点；下方行业聚合仍直接采用传入
-    主表，存在已记录的 F01 未来行业版本缺陷，不能把此结果当作完整时点保证。
+    目标里的行业不补充缺失主表；缺失、重叠或冲突阻新增，独立减风险路径不受此限制。
     """
     # 普通提交即使方向为卖出也先要求正常链路；紧急减仓另有接口。
-    reasons = _hard_checks(intent, account, open_orders, quotes, config, now, calendar)
+    reasons = _hard_checks(
+        intent, account, open_orders, quotes, config, now, calendar, queue_context
+    )
     if not reconciled:
         reasons.append("unreconciled_account")
     if not data_good:
@@ -281,24 +386,16 @@ def assess_order(
         reasons.append("nonpositive_after_fee_nav")
     if intent.side == "BUY":
         # 执行时主表资格必须重新核验，目标行业字段不等于交易资格。
-        market_day = now.astimezone(ZoneInfo("America/New_York")).date()
-        # 仅当时已知且当前有效的主表可作为身份依据。
-        current_masters = [
-            record
-            for record in security_records or []
-            if record.security_id == intent.security_id
-            and record.available_at <= now
-            and record.event_time <= now
-            and record.effective_from <= market_day
-            and (record.effective_to is None or market_day < record.effective_to)
-        ]
+        current_masters = resolve_security_records(
+            security_records or [], now, allow_unknown_sector=config.strategy == "ma-trend"
+        )
+        security = current_masters.get(intent.security_id)
         # 缺失、重叠、退市、停牌、隔离和非普通股均不能新增买入。
         if (
-            len(current_masters) != 1
-            or not current_masters[0].listed
-            or not current_masters[0].tradable
-            or current_masters[0].quality != "good"
-            or current_masters[0].asset_type != "common_stock"
+            security is None
+            or not security.listed
+            or not security.tradable
+            or security.asset_type != "common_stock"
         ):
             reasons.append("security_not_eligible")
         # 禁止以未成交卖单补足购买力。
@@ -320,7 +417,7 @@ def assess_order(
         ):
             reasons.append("drawdown_limit")
         # 全部旧仓与挂买单估值也必须使用当下可知的新鲜报价。
-        if any(
+        if queue_context is None and any(
             quantity > 0
             and sid in quotes
             and (
@@ -331,7 +428,7 @@ def assess_order(
         ):
             reasons.append("stale_projected_position_quote")
         # 持仓数按实际加未完成买单计算。
-        if sum(quantity > 0 for quantity in projected.values()) > config.max_positions:
+        if sum(quantity > 0 for quantity in projected.values()) > position_limit(config):
             reasons.append("position_count_limit")
         # 需要全部最坏持仓的原始价格。
         if any(
@@ -357,27 +454,21 @@ def assess_order(
                 for amount in notionals.values()
             ):
                 reasons.append("single_position_limit")
-            # 此处直接读取传入主表，未复用上面的时点过滤；未来版本可覆盖行业（F01）。
-            sectors = {security.security_id: security.sector for security in security_records or []}
-            # 目标携带的行业可补充当前入选证券。
-            if target is not None:
-                for position in target.positions:
-                    # setdefault 只补主表没有的证券行业，不覆盖已存在分类；不修复 F01。
-                    sectors.setdefault(position.security_id, position.sector)
+            # 与新单资格使用同一份时点选择结果；旧仓及挂买单也不能泄漏未来行业。
+            sectors = {sid: record.sector for sid, record in current_masters.items()}
             # 缺行业不能跳过风险集中度检查。
             if any(security_id not in sectors for security_id in notionals):
                 reasons.append("missing_sector_classification")
             else:
                 # sector_totals 是行业→最坏美元市值，从各证券 notionals 按行业归集；
                 # get 的零表示该行业尚未累计，不是把缺少行业分类的证券当作零风险。
-                sector_totals: dict[str, Decimal] = {}
+                sector_totals: dict[str | None, Decimal] = {}
                 for security_id, amount in notionals.items():
                     sector_totals[sectors[security_id]] = (
                         sector_totals.get(sectors[security_id], Decimal("0")) + amount
                     )
-                if any(
-                    amount > exposure_nav * Decimal(str(config.max_sector))
-                    for amount in sector_totals.values()
+                if sector_exposure_peak(sector_totals) > exposure_nav * Decimal(
+                    str(config.max_sector)
                 ):
                     reasons.append("sector_exposure_limit")
     # ADV 为历史 20 日平均成交股数；缺字典或缺本证券（默认零）都使正数量意图失败。
@@ -396,4 +487,92 @@ def assess_order(
     # 任一失败都禁止本次正常提交，同时保留独立减风险接口。
     return RiskDecision(
         allowed=not reasons, operation="NEW", freeze_new_risk=bool(reasons), reasons=reasons
+    )
+
+
+def assess_order(
+    intent: OrderIntent,
+    account: AccountSnapshot,
+    open_orders: list[OrderRecord],
+    quotes: dict[str, Quote],
+    config: StrategyConfig,
+    now: datetime,
+    calendar: TradingCalendar,
+    *,
+    reconciled: bool = True,
+    data_good: bool = True,
+    reference_nav: Decimal | None = None,
+    peak_nav: Decimal | None = None,
+    target: TargetPortfolio | None = None,
+    security_records: list[SecurityRecord] | None = None,
+    adv: dict[str, float] | None = None,
+    turnover_used: Decimal | None = None,
+) -> RiskDecision:
+    """核验正常策略委托；必须在常规时段、使用新鲜原始报价并满足全部预算规则。
+
+    target 是批准目标，reference_nav/peak_nav 是正美元净值基线；adv 是此前20日
+    平均成交股数，turnover_used 是本决策实际交易总额。缺失必需事实拒绝，不能
+    借本入口传入休市测试上下文；返回风险结论，不发单或改账务。
+    """
+    return _assess_order(
+        intent,
+        account,
+        open_orders,
+        quotes,
+        config,
+        now,
+        calendar,
+        reconciled=reconciled,
+        data_good=data_good,
+        reference_nav=reference_nav,
+        peak_nav=peak_nav,
+        target=target,
+        security_records=security_records,
+        adv=adv,
+        turnover_used=turnover_used,
+    )
+
+
+def assess_paper_queue_test(
+    intent: OrderIntent,
+    account: AccountSnapshot,
+    open_orders: list[OrderRecord],
+    quotes: dict[str, Quote],
+    config: StrategyConfig,
+    now: datetime,
+    calendar: TradingCalendar,
+    *,
+    context: PaperQueueTestContext,
+    reconciled: bool = True,
+    data_good: bool = True,
+    reference_nav: Decimal | None = None,
+    peak_nav: Decimal | None = None,
+    target: TargetPortfolio | None = None,
+    security_records: list[SecurityRecord] | None = None,
+    adv: dict[str, float] | None = None,
+    turnover_used: Decimal | None = None,
+) -> RiskDecision:
+    """核验独立休市排队撤单测试，复用正常策略全部资金和集中度计算。
+
+    context 显式绑定真实收盘资料、休市时钟和未来开盘，只授权一个Paper MA目标
+    的一股限价买单。该入口不会认可普通旧报价；不满足来源、空仓、时间缓冲或
+    数量边界时明确拒绝。返回允许不表示订单已提交或已撤销。
+    """
+    return _assess_order(
+        intent,
+        account,
+        open_orders,
+        quotes,
+        config,
+        now,
+        calendar,
+        reconciled=reconciled,
+        data_good=data_good,
+        reference_nav=reference_nav,
+        peak_nav=peak_nav,
+        target=target,
+        security_records=security_records,
+        adv=adv,
+        turnover_used=turnover_used,
+        queue_context=context,
     )

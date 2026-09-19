@@ -2,7 +2,7 @@
 
 quant-core 使用程序生成的合成行情，在本地演练选股、持仓规划、模拟订单、现金与持仓记账，以及中文报告生成。它用于理解和检查交易程序各步骤如何衔接，并保存输入与处理记录，便于核对结果。
 
-当前阶段是离线工程验证。**尚未接入 Alpaca，也不需要券商账户或 API 密钥。** FakeBroker 是仓库内的本地模拟券商，不是 Alpaca 的外部模拟账户。
+默认演示保持无密钥离线。新增独立 Alpaca Paper 入口，已读取真实账户和SIP历史行情；原双因子仍缺行业及总回报资料；新增独立 MA5/MA20 价格趋势策略，不需要总回报、未知行业按最坏集中度计量。已真实验证受限订单的提交、查询、撤销及重启核对，实际成交仍待验证。**Paper 成交闭环是否完成以最新[项目状态](PROJECT_STATE.md)为准，不以只读或离线测试替代。** FakeBroker 仍只用于离线演示和测试。Paper配置、凭据和操作步骤见[运行手册](docs/runbooks/alpaca-paper.md)。
 
 ## 当前能力与关键限制
 
@@ -11,7 +11,21 @@ quant-core 使用程序生成的合成行情，在本地演练选股、持仓规
 - **核对与重现**：将内部账本与本地模拟券商各自记录的账户、订单比较，这称为“对账”；根据保存的输入和事件重新构建结果，称为“回放”。
 - **因子研究**：统计选股指标与后续收益之间的样本关系。当前样本不是真实历史行情；研究统计和一次模拟成交都不能代替完整、扣除交易成本的策略回测，也不证明策略盈利。
 
-当前仍有已知问题：行业分类的历史版本可能影响风险判断；监控可能漏报目标之外的实际持仓；数量仅支持整股，不支持不足一股的碎股交易。具体发现与限制见[上线阻塞记录](docs/audit/launch-blockers.md)，最新实现与验证范围见[项目状态](PROJECT_STATE.md)。
+行业时点和目标外持仓监控缺陷已修复并补回归。Paper当前只支持小候选范围、空仓首次买入、整股限价与同目录恢复；不足一股的事实不会截断，非成交活动与数据缺失会阻断。持续运行、任意旧仓迁移、碎股及实盘未验收；见[本轮接入记录](docs/audit/alpaca-paper.md)及[项目状态](PROJECT_STATE.md)。
+
+## 查看运行进度与数据
+
+本地只读展示窗口可查看真实Paper的账户、独立策略预算、行情、因子/目标、订单及核对状态；没有完成的阶段明确显示待验证。它与策略代码解耦，不读取凭据，也没有交易按钮。
+
+```bash
+# uv（在仓库根目录执行，替换运行结果目录）
+uv run --offline --locked python -m tools.paper_viewer --run-dir <运行结果目录> --port 8765
+
+# Conda：激活已安装项目依赖的项目环境后
+python -m tools.paper_viewer --run-dir <运行结果目录> --port 8765
+```
+
+打开 [http://127.0.0.1:8765/](http://127.0.0.1:8765/)；已有保存数据即可查看，无需重新运行或等交易完成，刷新仅重读本地文件。目录须已存在；本机最近验收目录为 `artifacts/paper-queue-20260920/plan-04`，新检出需先采集，完整步骤见[展示窗口](docs/runbooks/alpaca-paper.md#本地展示窗口)。
 
 ## 环境要求与首次运行
 
@@ -66,7 +80,8 @@ src/quant_core/          选股、组合、风险、订单、账务和应用入�
 configs/                演示参数
 contracts/              从代码模型导出的 Schema 和消息示例
 tests/                  业务、恢复、契约与治理测试
-tools/                  开发检查、契约导出与数据库备份工具
+tools/                  开发检查、契约导出、备份及只读展示工具
+viewer/                 与交易核心解耦的静态展示页面
 docs/                   使用、设计、专题与审计文档
 prompts/                接手、实现、评审等维护模板
 .github/                CI 检查定义，不代表远端已经运行通过
@@ -101,6 +116,7 @@ Conda 用户运行 `conda run -n quant-core-dev quant-core check`，仍执行同
 | 运行项目 | [快速开始](docs/runbooks/quickstart.md)、[配置说明](docs/configuration.md) |
 | 理解代码 | [业务代码导读](docs/code_walkthrough/business-chain.md)、[架构与职责](ARCHITECTURE.md) |
 | 参与开发 | [维护流程](docs/runbooks/ai-maintenance.md)、[维护提示词](prompts/README.md) |
+| 运行外部模拟账户 | [Alpaca Paper手册](docs/runbooks/alpaca-paper.md)、[真实验证与阻塞](docs/audit/alpaca-paper.md) |
 | 查看状态 | [项目状态](PROJECT_STATE.md)、[变更记录](CHANGELOG.md) |
 
 完整的专题、需求、恢复和历史审计入口见[文档导航](docs/README.md)。

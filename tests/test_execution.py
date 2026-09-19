@@ -3,7 +3,7 @@
 import sqlite3
 import subprocess
 import sys
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -19,6 +19,7 @@ from quant_core.contracts import (
     CorporateAction,
     DemoConfig,
     FillEvent,
+    OrderEvent,
     OrderIntent,
     Quote,
     RiskBlocked,
@@ -574,3 +575,77 @@ def test_missing_approved_context_cannot_reach_broker(tmp_path: Path, missing: s
         service.submit(intent(), {"A": quote()}, **context)
     assert broker.orders() == []
     assert store.orders()[0].status == "REJECTED"
+
+
+def test_recovery_accepts_fill_during_event_read_without_permanent_freeze(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """查询期间真实发生的成交可入账，旧订单快照差异只要求再次核对，不永久冻结。
+
+    请求起点 t0、成交 t1、事件响应 t2、账户响应 t3 均由测试明示；现金独立手算
+    100000 - 4×100 - 1 = 99599，不用被测恢复结果计算期望。
+    """
+    store, broker, service = setup(tmp_path)
+    submit(service)
+    clock = service.clock
+    assert isinstance(clock, FixedClock)
+    original_events = broker.events
+    original_account = broker.account
+
+    def delayed_events() -> list[OrderEvent | FillEvent]:
+        """在网络读取期间发生四股成交，再于两秒后交付完整事件响应。"""
+        clock.advance(AT + timedelta(seconds=1))
+        broker.fill("order-A", quote().model_copy(update={"at": AT + timedelta(seconds=1)}), 4)
+        clock.advance(AT + timedelta(seconds=2))
+        return original_events()
+
+    def delayed_account() -> AccountSnapshot:
+        """模拟独立账户响应再迟一秒，最终核对时间应取这个响应之后。"""
+        clock.advance(AT + timedelta(seconds=3))
+        return original_account()
+
+    monkeypatch.setattr(broker, "events", delayed_events)
+    monkeypatch.setattr(broker, "account", delayed_account)
+    result = service.recover()
+    assert store.frozen() == []
+    assert store.account(result.as_of).positions == {"A": 4}
+    assert store.account(result.as_of).cash == Decimal("99599")
+    assert result.as_of == AT + timedelta(seconds=3)
+    # 订单列表在成交前已返回 OPEN，本轮仍应报告快照不一致；下一次读齐后自然恢复。
+    assert result.matched is False
+    assert "fill_quantity_mismatch:order-A" in result.differences
+    monkeypatch.setattr(broker, "events", original_events)
+    monkeypatch.setattr(broker, "account", original_account)
+    assert service.recover().matched is True
+
+
+def test_recovery_still_freezes_event_after_response_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """即使完整事件查询已经返回，声称下一秒才发生的成交仍须冻结且不入账。"""
+    store, broker, service = setup(tmp_path)
+    submit(service)
+    future = FillEvent(
+        event_id="future-response-event",
+        fill_id="future-response-fill",
+        account_id="DEMO",
+        client_order_id="order-A",
+        broker_order_id="FAKE:order-A",
+        security_id="A",
+        side="BUY",
+        quantity=4,
+        price=Decimal("100"),
+        fee=Decimal("1"),
+        at=AT + timedelta(seconds=1),
+    )
+
+    def future_events() -> list[OrderEvent | FillEvent]:
+        """交付固定未来事件而不前移本地时钟，形成真实的时间矛盾。"""
+        return [future]
+
+    monkeypatch.setattr(broker, "events", future_events)
+    result = service.recover()
+    assert result.matched is False
+    assert store.frozen() == [f"FUTURE_BROKER_EVENT:{future.source}:{future.event_id}"]
+    assert store.account(AT).positions == {}
+    assert store.account(AT).cash == Decimal("100000")

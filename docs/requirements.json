@@ -4,53 +4,91 @@
     "implementation": [
       "src/quant_core/contracts.py",
       "src/quant_core/adapters/storage.py",
-      "tools/export_contracts.py"
+      "tools/export_contracts.py",
+      "src/quant_core/adapters/alpaca_data.py",
+      "src/quant_core/adapters/alpaca.py"
     ],
     "tests": [
       "tests/test_contracts.py",
-      "tests/test_governance.py"
+      "tests/test_governance.py",
+      "tests/test_alpaca_data.py",
+      "tests/test_alpaca.py",
+      "tests/test_paper_config.py",
+      "tests/test_ma_contracts.py",
+      "tests/test_ma_data.py",
+      "tests/test_paper_queue_risk.py",
+      "tests/test_paper_queue_application.py",
+      "tests/test_paper_queue_clock.py",
+      "tests/test_pre_submit_rejection.py"
     ],
     "docs": [
       "docs/contracts.md",
-      "docs/runbooks/backups-migrations.md"
+      "docs/runbooks/backups-migrations.md",
+      "docs/runbooks/alpaca-paper.md",
+      "docs/audit/alpaca-paper.md",
+      "docs/strategies/ma-trend.md",
+      "docs/audit/ma-paper.md",
+      "docs/audit/paper-queue.md"
     ]
   },
   {
     "id": "QC-002",
     "implementation": [
-      "src/quant_core/data.py"
+      "src/quant_core/data.py",
+      "src/quant_core/adapters/alpaca_data.py"
     ],
     "tests": [
-      "tests/test_data.py"
+      "tests/test_data.py",
+      "tests/test_alpaca_data.py",
+      "tests/test_ma_data.py",
+      "tests/test_ma_strategy.py"
     ],
     "docs": [
-      "docs/contracts.md"
+      "docs/contracts.md",
+      "docs/runbooks/alpaca-paper.md",
+      "docs/audit/alpaca-paper.md",
+      "docs/strategies/ma-trend.md",
+      "docs/audit/ma-paper.md"
     ]
   },
   {
     "id": "QC-003",
     "implementation": [
       "src/quant_core/universe.py",
-      "src/quant_core/data.py"
+      "src/quant_core/data.py",
+      "src/quant_core/adapters/alpaca_data.py"
     ],
     "tests": [
-      "tests/test_data.py"
+      "tests/test_data.py",
+      "tests/test_alpaca_data.py",
+      "tests/test_ma_data.py"
     ],
     "docs": [
-      "ARCHITECTURE.md"
+      "ARCHITECTURE.md",
+      "docs/runbooks/alpaca-paper.md",
+      "docs/audit/alpaca-paper.md",
+      "docs/strategies/ma-trend.md",
+      "docs/audit/ma-paper.md"
     ]
   },
   {
     "id": "QC-004",
     "implementation": [
-      "src/quant_core/factors.py"
+      "src/quant_core/factors.py",
+      "src/quant_core/adapters/alpaca_data.py"
     ],
     "tests": [
-      "tests/test_factors.py"
+      "tests/test_factors.py",
+      "tests/test_alpaca_data.py",
+      "tests/test_ma_strategy.py"
     ],
     "docs": [
       "docs/factors/momentum.md",
-      "docs/factors/low-volatility.md"
+      "docs/factors/low-volatility.md",
+      "docs/runbooks/alpaca-paper.md",
+      "docs/audit/alpaca-paper.md",
+      "docs/strategies/ma-trend.md",
+      "docs/audit/ma-paper.md"
     ]
   },
   {
@@ -59,24 +97,39 @@
       "src/quant_core/signals.py"
     ],
     "tests": [
-      "tests/test_factors.py"
+      "tests/test_factors.py",
+      "tests/test_ma_strategy.py"
     ],
     "docs": [
       "docs/code_walkthrough/business-chain.md",
-      "docs/strategies/weekly-two-factor.md"
+      "docs/strategies/weekly-two-factor.md",
+      "docs/runbooks/alpaca-paper.md",
+      "docs/audit/alpaca-paper.md",
+      "docs/strategies/ma-trend.md",
+      "docs/audit/ma-paper.md"
     ]
   },
   {
     "id": "QC-006",
     "implementation": [
-      "src/quant_core/portfolio.py"
+      "src/quant_core/portfolio.py",
+      "src/quant_core/adapters/paper_session.py",
+      "src/quant_core/application.py",
+      "src/quant_core/contracts.py"
     ],
     "tests": [
-      "tests/test_portfolio.py"
+      "tests/test_portfolio.py",
+      "tests/test_paper_application.py",
+      "tests/test_paper_config.py",
+      "tests/test_ma_risk.py"
     ],
     "docs": [
       "docs/runbooks/extensions.md",
-      "docs/strategies/weekly-two-factor.md"
+      "docs/strategies/weekly-two-factor.md",
+      "docs/runbooks/alpaca-paper.md",
+      "docs/audit/alpaca-paper.md",
+      "docs/strategies/ma-trend.md",
+      "docs/audit/ma-paper.md"
     ]
   },
   {
@@ -97,57 +150,104 @@
     "implementation": [
       "src/quant_core/execution.py",
       "src/quant_core/adapters/fake_broker.py",
-      "src/quant_core/adapters/sqlite_store.py"
+      "src/quant_core/adapters/sqlite_store.py",
+      "src/quant_core/adapters/alpaca.py",
+      "src/quant_core/adapters/paper_session.py",
+      "src/quant_core/application.py"
     ],
     "tests": [
-      "tests/test_execution.py"
+      "tests/test_execution.py",
+      "tests/test_alpaca.py",
+      "tests/test_paper_application.py",
+      "tests/test_paper_config.py",
+      "tests/test_ma_application.py",
+      "tests/test_paper_queue_risk.py",
+      "tests/test_paper_queue_application.py",
+      "tests/test_paper_queue_clock.py",
+      "tests/test_pre_submit_rejection.py"
     ],
     "docs": [
       "docs/runbooks/recovery.md",
       "docs/code_walkthrough/business-chain.md",
-      "docs/runbooks/backups-migrations.md"
+      "docs/runbooks/backups-migrations.md",
+      "docs/runbooks/alpaca-paper.md",
+      "docs/audit/alpaca-paper.md",
+      "docs/strategies/ma-trend.md",
+      "docs/audit/ma-paper.md",
+      "docs/audit/paper-queue.md"
     ]
   },
   {
     "id": "QC-009",
     "implementation": [
-      "src/quant_core/risk.py"
+      "src/quant_core/risk.py",
+      "src/quant_core/adapters/paper_session.py",
+      "src/quant_core/application.py"
     ],
     "tests": [
-      "tests/test_risk.py"
+      "tests/test_risk.py",
+      "tests/test_paper_application.py",
+      "tests/test_paper_config.py",
+      "tests/test_ma_risk.py",
+      "tests/test_paper_queue_risk.py",
+      "tests/test_paper_queue_application.py",
+      "tests/test_pre_submit_rejection.py"
     ],
     "docs": [
       "ASSUMPTIONS.md",
-      "docs/runbooks/recovery.md"
+      "docs/runbooks/recovery.md",
+      "docs/runbooks/alpaca-paper.md",
+      "docs/audit/alpaca-paper.md",
+      "docs/strategies/ma-trend.md",
+      "docs/audit/ma-paper.md",
+      "docs/audit/paper-queue.md"
     ]
   },
   {
     "id": "QC-010",
     "implementation": [
       "src/quant_core/ledger.py",
-      "tools/backup_sqlite.py"
+      "tools/backup_sqlite.py",
+      "src/quant_core/adapters/alpaca.py"
     ],
     "tests": [
       "tests/test_ledger.py",
-      "tests/test_governance.py"
+      "tests/test_governance.py",
+      "tests/test_alpaca.py",
+      "tests/test_ma_application.py",
+      "tests/test_paper_queue_risk.py",
+      "tests/test_paper_queue_application.py",
+      "tests/test_pre_submit_rejection.py"
     ],
     "docs": [
       "docs/contracts.md",
       "docs/runbooks/recovery.md",
-      "docs/runbooks/backups-migrations.md"
+      "docs/runbooks/backups-migrations.md",
+      "docs/runbooks/alpaca-paper.md",
+      "docs/audit/alpaca-paper.md",
+      "docs/strategies/ma-trend.md",
+      "docs/audit/ma-paper.md",
+      "docs/audit/paper-queue.md"
     ]
   },
   {
     "id": "QC-011",
     "implementation": [
-      "src/quant_core/adapters/calendar.py"
+      "src/quant_core/adapters/calendar.py",
+      "src/quant_core/adapters/alpaca_data.py"
     ],
     "tests": [
-      "tests/test_calendar.py"
+      "tests/test_calendar.py",
+      "tests/test_alpaca_data.py",
+      "tests/test_ma_application.py"
     ],
     "docs": [
       "SPEC.md",
-      "docs/strategies/weekly-two-factor.md"
+      "docs/strategies/weekly-two-factor.md",
+      "docs/runbooks/alpaca-paper.md",
+      "docs/audit/alpaca-paper.md",
+      "docs/strategies/ma-trend.md",
+      "docs/audit/ma-paper.md"
     ]
   },
   {
@@ -155,31 +255,64 @@
     "implementation": [
       "src/quant_core/application.py",
       "src/quant_core/reporting.py",
-      "src/quant_core/monitoring.py"
+      "src/quant_core/monitoring.py",
+      "src/quant_core/adapters/paper_session.py",
+      "tools/paper_viewer.py"
     ],
     "tests": [
       "tests/test_application.py",
       "tests/test_execution.py",
-      "tests/test_monitoring.py"
+      "tests/test_monitoring.py",
+      "tests/test_paper_application.py",
+      "tests/test_paper_config.py",
+      "tests/test_paper_viewer.py",
+      "tests/test_ma_application.py",
+      "tests/test_ma_viewer.py",
+      "tests/test_paper_queue_risk.py",
+      "tests/test_paper_queue_application.py",
+      "tests/test_pre_submit_rejection.py"
     ],
     "docs": [
       "docs/code_walkthrough/business-chain.md",
-      "docs/runbooks/backups-migrations.md"
+      "docs/runbooks/backups-migrations.md",
+      "docs/runbooks/alpaca-paper.md",
+      "docs/audit/alpaca-paper.md",
+      "docs/strategies/ma-trend.md",
+      "docs/audit/ma-paper.md",
+      "docs/audit/paper-queue.md"
     ]
   },
   {
     "id": "QC-013",
     "implementation": [
       "src/quant_core/application.py",
-      "src/quant_core/cli.py"
+      "src/quant_core/cli.py",
+      "src/quant_core/adapters/alpaca.py",
+      "src/quant_core/adapters/paper_session.py",
+      "src/quant_core/contracts.py",
+      "tools/paper_viewer.py"
     ],
     "tests": [
-      "tests/test_application.py"
+      "tests/test_application.py",
+      "tests/test_alpaca.py",
+      "tests/test_paper_application.py",
+      "tests/test_paper_config.py",
+      "tests/conftest.py",
+      "tests/test_paper_viewer.py",
+      "tests/test_ma_application.py",
+      "tests/test_ma_viewer.py",
+      "tests/test_paper_queue_risk.py",
+      "tests/test_paper_queue_application.py"
     ],
     "docs": [
       "README.md",
       "docs/runbooks/quickstart.md",
-      "docs/audit/conda-compatibility.md"
+      "docs/audit/conda-compatibility.md",
+      "docs/runbooks/alpaca-paper.md",
+      "docs/audit/alpaca-paper.md",
+      "docs/strategies/ma-trend.md",
+      "docs/audit/ma-paper.md",
+      "docs/audit/paper-queue.md"
     ]
   },
   {
@@ -207,22 +340,41 @@
       "docs/audit/comment-semantics-migration.md",
       "prompts/README.md",
       "docs/audit/local-context-readability.md",
-      "docs/audit/readability-compliance.md"
+      "docs/audit/readability-compliance.md",
+      "docs/runbooks/alpaca-paper.md",
+      "docs/audit/alpaca-paper.md"
     ]
   },
   {
     "id": "QC-015",
     "implementation": [
-      "tools/governance.py"
+      "tools/governance.py",
+      "src/quant_core/adapters/paper_session.py",
+      "src/quant_core/application.py",
+      "tools/paper_viewer.py"
     ],
     "tests": [
-      "tests/test_governance.py"
+      "tests/test_governance.py",
+      "tests/test_paper_application.py",
+      "tests/test_paper_config.py",
+      "tests/test_paper_viewer.py",
+      "tests/test_ma_contracts.py",
+      "tests/test_ma_application.py",
+      "tests/test_paper_queue_risk.py",
+      "tests/test_paper_queue_application.py",
+      "tests/test_paper_queue_clock.py",
+      "tests/test_pre_submit_rejection.py"
     ],
     "docs": [
       "docs/adr/0002-governance-evidence.md",
       "prompts/review.md",
       "docs/runbooks/ai-maintenance.md",
-      "docs/audit/conda-compatibility.md"
+      "docs/audit/conda-compatibility.md",
+      "docs/runbooks/alpaca-paper.md",
+      "docs/audit/alpaca-paper.md",
+      "docs/strategies/ma-trend.md",
+      "docs/audit/ma-paper.md",
+      "docs/audit/paper-queue.md"
     ]
   },
   {

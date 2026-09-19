@@ -1,0 +1,45 @@
+{
+  "additionalProperties": false,
+  "description": "旧版休市测试唯一提交前拒绝的审计凭据，不是券商拒单或通用强制终态。\n\n应用须先核对旧运行失败文件、批准计划和源码，并保存独立审查证据。\nevidence_hash 指向这些证据的内容指纹；执行服务另核对意图日志与远端事实。\n固定源码和原因仅适用于已确认的旧版时钟边界缺陷，404本身不构成此证明。",
+  "properties": {
+    "client_order_id": {
+      "title": "Client Order Id",
+      "type": "string"
+    },
+    "evidence_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Evidence Hash",
+      "type": "string"
+    },
+    "failed_source_hash": {
+      "const": "07be0b052412b809fb4acf317202d0cb0a41e0861744f629c77a30c205eef072",
+      "title": "Failed Source Hash",
+      "type": "string"
+    },
+    "failure_reason": {
+      "const": "Paper 排队测试的单股、金额、身份或休市边界不符",
+      "title": "Failure Reason",
+      "type": "string"
+    },
+    "plan_id": {
+      "title": "Plan Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "pattern": "^1\\.0\\.0$",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "plan_id",
+    "client_order_id",
+    "failed_source_hash",
+    "failure_reason",
+    "evidence_hash"
+  ],
+  "title": "QueuePreflightRejectionProof",
+  "type": "object"
+}

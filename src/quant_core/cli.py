@@ -7,6 +7,8 @@ import argparse
 import json
 import subprocess
 import sys
+import tomllib
+from decimal import Decimal
 from pathlib import Path
 
 from quant_core.adapters.storage import load_config
@@ -79,6 +81,41 @@ def make_parser() -> argparse.ArgumentParser:
             command.add_argument("--output", type=Path, required=True)
     check = commands.add_parser("check", help="运行治理、pytest、Ruff和严格mypy")
     check.add_argument("--base", help="独立审查使用的Git比较基线")
+    paper_read = commands.add_parser("paper-read", help="已授权账户的真实 Paper 只读核验")
+    paper_read.add_argument("--config", type=Path, required=True)
+    paper_read.add_argument("--credentials", type=Path, required=True)
+    paper_read.add_argument("--output", type=Path, required=True)
+    paper_plan = commands.add_parser("paper-plan", help="按配置使用总回报或MA拆股价格形成策略目标")
+    paper_plan.add_argument("--source", type=Path, required=True)
+    paper_plan.add_argument("--supplement", type=Path, help="原双因子必需的总回报/行业证据")
+    paper_plan.add_argument("--identity-evidence", type=Path, help="MA必需的当前普通股身份来源")
+    paper_plan.add_argument("--output", type=Path, required=True)
+    for name in ("paper-execute", "paper-recover"):
+        paper = commands.add_parser(name, help="按明确批准边界执行或恢复同一 Paper 计划")
+        paper.add_argument("--run-dir", type=Path, required=True)
+        paper.add_argument("--credentials", type=Path, required=True)
+        paper.add_argument("--approve-plan", required=True)
+        paper.add_argument("--max-orders", type=int, required=True)
+        paper.add_argument("--max-order-notional", type=Decimal, required=True)
+        paper.add_argument("--unfilled", choices=("keep", "cancel"), required=True)
+        if name == "paper-execute":
+            paper.add_argument(
+                "--queue-cancel-test",
+                action="store_true",
+                help="显式休市Paper提交撤单测试：首个MA目标一股，必须max-orders=1及unfilled=cancel",
+            )
+        if name == "paper-recover":
+            paper.add_argument(
+                "--confirm-unsent-source",
+                type=Path,
+                help="仅核验固定旧版预提交缺陷的完整源码证据；不能用404解除普通未知订单",
+            )
+        paper.add_argument(
+            "--observe-seconds",
+            type=int,
+            default=300,
+            help="提交后观察上限0至300秒；恢复不等待，仍按已授权未成交策略处理",
+        )
     return parser
 
 
@@ -91,6 +128,41 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "check":
             return check_project(args.base)
+        if args.command.startswith("paper-"):
+            from quant_core.adapters.paper_session import SystemClock, credential_transport
+            from quant_core.adapters.storage import read_json
+            from quant_core.application import paper_execute, paper_plan, paper_read
+            from quant_core.contracts import PaperConfig
+
+            if args.command == "paper-plan":
+                result = paper_plan(
+                    args.source, args.supplement, args.output, identity_path=args.identity_evidence
+                )
+            else:
+                config = PaperConfig.model_validate(
+                    tomllib.loads(args.config.read_text())
+                    if args.command == "paper-read"
+                    else read_json(args.run_dir / "config.json")
+                )
+                transport = credential_transport(args.credentials, config.account_id)
+                if args.command == "paper-read":
+                    result = paper_read(config, args.output, transport, SystemClock())
+                else:
+                    result = paper_execute(
+                        args.run_dir,
+                        transport,
+                        SystemClock(),
+                        approved_plan=args.approve_plan,
+                        max_orders=args.max_orders,
+                        max_order_notional=args.max_order_notional,
+                        unfilled=args.unfilled,
+                        recover_only=args.command == "paper-recover",
+                        queue_cancel_test=getattr(args, "queue_cancel_test", False),
+                        observe_seconds=args.observe_seconds,
+                        confirm_unsent_source=getattr(args, "confirm_unsent_source", None),
+                    )
+            print(json.dumps(result, ensure_ascii=False))
+            return 3 if result.get("status") in {"blocked", "remote_observation_failed"} else 0
         if args.command == "demo":
             # load_config 做配置校验，run_demo 才创建新目录、两份本地账户库和模拟交易记录。
             manifest = run_demo(load_config(args.config), args.output)

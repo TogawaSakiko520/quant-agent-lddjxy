@@ -1,6 +1,6 @@
 """确定性监控规则；输出独立告警事实，不发送网络通知、不改写交易状态。
 
-检查运行完整性、数据质量、心跳、时钟、订单、目标内持仓偏差与因子覆盖率。
+检查运行完整性、数据质量、心跳、时钟、订单、全部持仓偏差与因子覆盖率。
 """
 
 from datetime import datetime
@@ -50,8 +50,8 @@ def assess_health(
     factor_coverage 由调用方计算；标准演示取双因子共同有效的评分证券数除以原始
     候选股票数，不是成交比例或目标完成率。[0, 1] 是输入前提，本函数不重算或校验
     该比例范围。无规则触发时返回 HEALTHY 记录，不发送通知。
-    当前持仓偏离只遍历 target.positions，目标之外的实际旧仓可能漏报（已知 F02）；
-    HEALTHY 仅表示本函数现有检查未触发，不保证账户完全达到目标。
+    持仓偏离比较目标与实际证券并集，未列目标的旧仓按零目标比较；只告警不补单。
+    HEALTHY 仅表示注入事实未触发本函数规则，不证明外部通知或持续运行正常。
     """
     alerts: list[Alert] = []
     # 任务完成标记防止某阶段静默跳过。
@@ -116,11 +116,13 @@ def assess_health(
             )
         )
     # deviations 只保存未达目标的证券 ID，不保存应补多少股，也不生成订单。
-    # account.positions 缺键表示实有零股；只遍历目标，目标外实际持仓仍漏报（F02）。
+    # 目标缺键表示不再希望持有；账户缺键表示实有零股。并集包含待退出的目标外旧仓，
+    # sorted 固定告警顺序，零股残留键与零目标一致，不产生虚假偏离。
+    desired = {position.security_id: position.quantity for position in target.positions}
     deviations = [
-        position.security_id
-        for position in target.positions
-        if account.positions.get(position.security_id, 0) != position.quantity
+        security_id
+        for security_id in sorted(set(desired) | set(account.positions))
+        if account.positions.get(security_id, 0) != desired.get(security_id, 0)
     ]
     # 偏离本身不触发强制补单。
     if deviations:

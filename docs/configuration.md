@@ -33,3 +33,15 @@
 阈值只能触发处置，不能保证实际损失不超过阈值。报价年龄、费用、缓冲、流动性和换手都需在下单前按实际账户、未完成订单和原始价格重查。异常分支不能通过修改默认值被隐藏。
 
 更改任何字段或默认值时，同步类型/Schema、TOML 示例、本页、相关测试、代码说明、需求映射及 CHANGELOG；风险敏感变更需要独立复核和授权依据。
+
+## 独立 Paper 配置
+
+[configs/alpaca-paper.example.toml](../configs/alpaca-paper.example.toml) 由 `PaperConfig` 校验，和Demo配置分别装配。`account_id` 是用户明确指定的Paper账户，`candidates`为2—30个唯一大写代码，`budget`为策略分配美元（不等于全部余额/购买力），`history_start/end`为日线查询日期，`history_feed`固定SIP。`quote_feed`可显式IEX或SIP，默认IEX的最新卖价只用于执行，不能用其量替代历史综合ADV。
+
+Paper继承StrategyConfig的原4.5%目标、5%单票、25%行业、90%总仓、20名额、100%换手、1%ADV、费用预留及风控参数，并拒绝本阶段对这些值的覆盖。预算不足造成零整股应保留空目标，不自动提高上限。交易主机固定Paper，行情主机固定官方数据服务；没有live回退。计划、单笔含费用金额上限、订单总数和未成交处理通过显式命令确认；凭据不进TOML。完整操作与字段解释见[Paper手册](runbooks/alpaca-paper.md)。
+
+## MA选择与边界
+
+`strategy` 默认 `weekly-two-factor`；Paper可显式 `ma-trend`，示例为[MA配置](../configs/alpaca-ma.example.toml)。MA按独立版本最多3个可行目标，原max_positions=20是共同配置上限，不代表MA可选20只；其他风险数字不能覆盖。MA明确支持未知行业最坏集中度，而原策略拒绝缺行业。CLI观察参数见[Paper手册](runbooks/alpaca-paper.md)。
+
+`--queue-cancel-test`是单独授权的Paper订单操作测试开关，不是配置中的策略或通用时段豁免。仅允许MA首个目标一股、最多一笔且必须撤余单；使用真实最后收盘参考价，普通模式仍要求新鲜报价和开市。具体边界与验收字段见[休市测试](runbooks/alpaca-paper.md#休市提交与撤单测试)。

@@ -70,6 +70,11 @@ def assess_regime(
         return RegimeAssessment(
             as_of=as_of, state="UNKNOWN", evidence={"reason": "insufficient_or_bad_history"}
         )
+    # 该观察器继续使用总回报口径；均线策略的仅拆股价不能替代此研究输入。
+    if any(record.total_return_close is None for record in history):
+        return RegimeAssessment(
+            as_of=as_of, state="UNKNOWN", evidence={"reason": "missing_total_return_price"}
+        )
     # 趋势在未穿越阈值时保持中性起点。
     trend = "NEUTRAL"
     # 波动状态初始为普通，进入高波动仍须三日证据。
@@ -86,7 +91,11 @@ def assess_regime(
     for index in range(199, len(history)):
         # index 从199开始，切片 [index-199:index+1] 包含当前日及前199日，共200个研究价；
         # 窗口事件日不超过当前日，版本选择已在 as_of 时刻统一完成。
-        prices = [record.total_return_close for record in history[index - 199 : index + 1]]
+        prices = [
+            record.total_return_close
+            for record in history[index - 199 : index + 1]
+            if record.total_return_close is not None
+        ]
         # 末日价除以200日简单均价（SMA200）得到无量纲比值，1.01 表示高于均价1%。
         ratio = prices[-1] / mean(prices)
         # 超过正负1%才提出新趋势，其余保留当前状态。

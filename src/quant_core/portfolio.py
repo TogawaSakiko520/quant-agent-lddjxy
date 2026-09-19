@@ -5,16 +5,17 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import ROUND_DOWN, Decimal
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from quant_core.contracts import (
     AccountSnapshot,
     ContractError,
-    DemoConfig,
     OrderIntent,
     OrderRecord,
     Quote,
     SecurityRecord,
     SignalSet,
+    StrategyConfig,
     TargetPortfolio,
     TargetPosition,
     canonical_hash,
@@ -24,7 +25,83 @@ from quant_core.contracts import (
 ACTIVE_STATUSES = frozenset({"PERSISTED", "OPEN", "PARTIAL", "CANCEL_PENDING", "UNKNOWN"})
 
 
-def order_fee(quantity: int, config: DemoConfig) -> Decimal:
+def resolve_security_records(
+    records: list[SecurityRecord], at: datetime, *, allow_unknown_sector: bool = False
+) -> dict[str, SecurityRecord]:
+    """选择 at 时已知、纽约当日有效的唯一证券主表。
+
+    每个证券、有效起日先取最高可知修订，再检查有效区间；不能让未来修订或
+    已失效版本覆盖行业。同版本冲突、区间重叠、质量失败及空行业使该证券不出现在
+    返回字典中，调用方因此阻止新增风险；停牌、退市旧仓仍保留其已知行业供估值。
+    allow_unknown_sector 仅允许明确的 None，供 MA 策略保守占用所有行业额度；
+    空字符串仍不合格，默认双因子要求明确行业。输入已过接入层契约和封印检查，
+    本函数不改变原记录或补造缺失资料。
+    """
+    market_day = at.astimezone(ZoneInfo("America/New_York")).date()
+    # 区间键为（稳定证券身份，有效起日）；可知版本中的最高修订决定该区间的事实。
+    versions: dict[tuple[str, object], SecurityRecord] = {}
+    conflicts: set[str] = set()
+    identities: dict[tuple[str, object, int], SecurityRecord] = {}
+    for record in records:
+        if record.available_at > at:
+            continue
+        identity = (record.security_id, record.effective_from, record.revision)
+        if identity in identities and identities[identity] != record:
+            conflicts.add(record.security_id)
+        identities[identity] = record
+        key = (record.security_id, record.effective_from)
+        if key not in versions or record.revision > versions[key].revision:
+            versions[key] = record
+    # 先选择修订再检查质量/事件时间，防止最新已知记录异常时退回旧版继续交易。
+    selected: dict[str, SecurityRecord] = {}
+    for record in versions.values():
+        if record.effective_to is not None and record.effective_to <= record.effective_from:
+            conflicts.add(record.security_id)
+        if record.effective_from <= market_day and (
+            record.effective_to is None or market_day < record.effective_to
+        ):
+            if (
+                record.security_id in selected
+                or record.event_time > at
+                or record.quality != "good"
+                or (record.sector is None and not allow_unknown_sector)
+                or (record.sector is not None and not record.sector.strip())
+            ):
+                conflicts.add(record.security_id)
+            selected[record.security_id] = record
+    return {sid: record for sid, record in selected.items() if sid not in conflicts}
+
+
+def sector_exposure_peak(totals: dict[str | None, Decimal]) -> Decimal:
+    """返回任一行业在未知分类全落入该行业时的最大美元占用。
+
+    None 代表真实未知分类，不是新增行业。已知行业各自加全部未知金额；如果没有
+    已知行业，未知金额本身仍受行业上限约束。空表表示尚无风险占用。
+    """
+    unknown = totals.get(None, Decimal("0"))
+    known_peak = max(
+        (value for key, value in totals.items() if key is not None), default=Decimal("0")
+    )
+    return known_peak + unknown
+
+
+def sector_committed(totals: dict[str | None, Decimal], sector: str | None) -> Decimal:
+    """返回候选行业已占用的最坏美元金额，供剩余额度计算。
+
+    已知候选只增加其已知行业，但须计入全部未知占用；未知候选可能落入任一已有
+    行业，所以取当前最拥挤行业加未知占用。不会把未知类别填成字符串行业。
+    """
+    if sector is None:
+        return sector_exposure_peak(totals)
+    return totals.get(sector, Decimal("0")) + totals.get(None, Decimal("0"))
+
+
+def position_limit(config: StrategyConfig) -> int:
+    """返回本策略持仓名额；MA 首轮最多三只且不放宽配置的更严格边界。"""
+    return min(3, config.max_positions) if config.strategy == "ma-trend" else config.max_positions
+
+
+def order_fee(quantity: int, config: StrategyConfig) -> Decimal:
     """计算整张订单的美元费用预留；最低费按订单计一次，零股不收费。"""
     return (
         max(config.minimum_fee, config.fee_per_share * quantity) if quantity > 0 else Decimal("0")
@@ -58,39 +135,44 @@ def build_portfolio(
     account: AccountSnapshot,
     quotes: dict[str, Quote],
     security_records: list[SecurityRecord],
-    config: DemoConfig,
+    config: StrategyConfig,
 ) -> TargetPortfolio:
     """把评分次序转换为受仓位上限约束的整股目标。
 
-    quotes 使用决策时刻可知的原始价格；security_records 应已通过历史时点闸门。
-    先保留不可交易旧仓，再按单票、行业、总仓位剩余额度分配；向下取整后余款
+    quotes 使用决策时刻可知的原始价格；security_records 在本入口再按时点选择。
+    先保留不可交易旧仓，再按单票、行业、总仓位剩余额度分配；MA 最多三只可行
+    目标，舍弃不可行候选后继续后面的排名。未知行业按最坏集中度占用。向下取整后余款
     留作现金，不重新归一化。返回目标及约束原因，不代表已经成交。
-    未来输入、旧仓无法估值或非正净值抛 ContractError。
+    未来报价/账户、旧仓无法估值或非正净值抛 ContractError；未来主表版本忽略。
     """
     # 目标决策不能偷看下一交易时段的执行价格。
     if any(quote.at > signals.decision_time for quote in quotes.values()):
         raise ContractError("目标组合不得使用未来报价")
-    # 目标不能借用决策后才确认的账户或证券身份。
-    if account.as_of > signals.decision_time or any(
-        record.available_at > signals.decision_time for record in security_records
-    ):
-        raise ContractError("目标组合不得使用未来账户或证券主表")
+    # 目标不能借用决策后才确认的账户；未来主表则由版本选择排除，不参与行业额度。
+    if account.as_of > signals.decision_time:
+        raise ContractError("目标组合不得使用未来账户")
     # 本函数的 nav 固定在决策时点；后续分配只改变目标，不改变账户净值事实。
     nav = account_nav(account, quotes)
-    # 历史主表由已通过时点闸门的调用方注入。
-    securities = {security.security_id: security for security in security_records}
+    # 目标生成也核验唯一行业，不能把直接调用方预筛主表当作已满足的保证。
+    securities = resolve_security_records(
+        security_records, signals.decision_time, allow_unknown_sector=config.strategy == "ma-trend"
+    )
     # positions 是待返回的目标列表；sector_used 是行业→已分配目标市值（美元），
     # 先计入不能卖掉的旧仓，再计入新目标，不是从账户里直接扣款。
     positions: list[TargetPosition] = []
     reasons: list[str] = []
-    sector_used: dict[str, Decimal] = {}
+    sector_used: dict[str | None, Decimal] = {}
     # reserved 累加必须保留的旧仓市值；locked 保存其证券 ID，防止再次分配目标。
     reserved = Decimal("0")
     locked: set[str] = set()
+    missing_old_sector = False
     for security_id, quantity in sorted(account.positions.items()):
         if quantity == 0:
             continue
         security = securities.get(security_id)
+        if security is None:
+            missing_old_sector = True
+            reasons.append(f"missing_sector_classification:{security_id}")
         # 证券缺身份、停牌、退市或报价停牌都不能假设卖掉。
         if (
             security is None
@@ -98,8 +180,8 @@ def build_portfolio(
             or not security.listed
             or not quotes[security_id].tradable
         ):
-            # 缺行业也必须占用独立未知行业额度。
-            sector = security.sector if security else "UNKNOWN"
+            # 主表缺失以 None 披露，随后阻止新增；不制造占位行业。
+            sector = security.sector if security else None
             notional = quotes[security_id].price * quantity
             reserved += notional
             # 首次出现的行业尚未占目标额度，get 的零只代表本次累计起点，不是缺行情填零。
@@ -118,8 +200,10 @@ def build_portfolio(
             if notional > nav * Decimal(str(config.max_single)):
                 reasons.append(f"locked_single_limit:{security_id}")
     # 不可交易持仓超出预算时停止分配新增目标。
-    locked_violation = reserved > nav * Decimal(str(config.max_gross)) or any(
-        amount > nav * Decimal(str(config.max_sector)) for amount in sector_used.values()
+    locked_violation = (
+        missing_old_sector
+        or reserved > nav * Decimal(str(config.max_gross))
+        or sector_exposure_peak(sector_used) > nav * Decimal(str(config.max_sector))
     )
     if locked_violation:
         reasons.append("locked_positions_make_constraints_infeasible")
@@ -129,9 +213,19 @@ def build_portfolio(
     # 评分顺序已固定，行业额度不足可跳过并继续尝试后续候选。
     for score in signals.scores:
         # 不能扩展不可行组合或超过总持仓数。
-        if locked_violation or len(positions) >= config.max_positions:
+        if locked_violation or len(positions) >= position_limit(config):
             break
         if score.security_id in locked:
+            continue
+        security = securities.get(score.security_id)
+        # 评分行业必须与当前主表一致；不让直接构造的评分绕过身份/行业闸门。
+        if security is None or not (
+            security.listed and security.tradable and security.asset_type == "common_stock"
+        ):
+            reasons.append(f"security_not_eligible:{score.security_id}")
+            continue
+        if score.sector != security.sector:
+            reasons.append(f"score_sector_mismatch:{score.security_id}")
             continue
         quote = quotes.get(score.security_id)
         # 缺价不能使用研究复权价格代替。
@@ -142,8 +236,8 @@ def build_portfolio(
         # 二进制尾差带入美元预算；下方所有额度取最小值后才转换成整股数量。
         base = nav * Decimal(str(min(config.target_weight, config.max_single)))
         # 行业剩余额度独立控制。
-        sector_room = nav * Decimal(str(config.max_sector)) - sector_used.get(
-            score.sector, Decimal("0")
+        sector_room = nav * Decimal(str(config.max_sector)) - sector_committed(
+            sector_used, score.sector
         )
         gross_room = nav * Decimal(str(config.max_gross)) - allocated
         # 三项上限取最小，不对剩余股票重新归一化。
@@ -185,7 +279,7 @@ def plan_orders(
     open_orders: list[OrderRecord],
     quotes: dict[str, Quote],
     adv: dict[str, float],
-    config: DemoConfig,
+    config: StrategyConfig,
     eligible_at: datetime,
     *,
     security_records: list[SecurityRecord] | None = None,
@@ -194,7 +288,8 @@ def plan_orders(
     """把目标与实际持仓、未完成订单的差额转换为可提交的整股意图。
 
     quotes 是 eligible_at 时刻可知的原始报价；adv 为此前 20 日平均成交股数。
-    security_records 须由调用方筛选为当时可知的有效主表，本函数不会过滤版本。
+    security_records 提供版本化主表；本函数按执行时点选择唯一有效行业，缺失或
+    冲突时保留卖出规划但不生成新增买单，不能用目标内行业代替当前主表事实。
     turnover_used 为本决策实际成交总额（美元）；已有成交时不能省略。
     open_orders 虽然名称含 open，调用方传入的是可含终态的历史订单列表；终态用于
     成交上下文及同键防重，只有 ACTIVE_STATUSES 中的记录继续占用数量和预算。
@@ -260,11 +355,11 @@ def plan_orders(
     risk_quantities = dict(account.positions)
     # risk_prices 保存各证券用于风险估值的美元单价，起初是现价，再取挂买限价较高值。
     risk_prices = {sid: quote.price for sid, quote in quotes.items()}
-    # 行业先取传入主表再用目标补缺；这里未筛选 available_at/有效区间（已知 F01 同类路径）。
-    risk_sectors = {record.security_id: record.sector for record in security_records or []}
-    for position in target.positions:
-        # setdefault 只补主表缺失的证券；已有分类不被目标覆盖，但不替代主表时点校验。
-        risk_sectors.setdefault(position.security_id, position.sector)
+    # 对旧仓、挂买单与新候选统一选择执行时主表；目标行业只是决策解释，不能补缺。
+    risk_securities = resolve_security_records(
+        security_records or [], eligible_at, allow_unknown_sector=config.strategy == "ma-trend"
+    )
+    risk_sectors = {sid: record.sector for sid, record in risk_securities.items()}
     # 活动买单占用其剩余数量和限价额度。
     for record in active:
         if record.intent.side == "BUY":
@@ -326,6 +421,11 @@ def plan_orders(
         quantity = min(abs(delta), liquidity, int(turnover_room / budget_price))
         # 买入先按执行时最坏价格计算集中度空间，再验证可用现金。
         if side == "BUY":
+            security = risk_securities.get(security_id)
+            if security is None or not (
+                security.listed and security.tradable and security.asset_type == "common_stock"
+            ):
+                continue
             # 缺行业或旧仓报价时先完成卖出/对账，不猜测风险贡献。
             if security_id not in risk_sectors or any(
                 amount > 0 and (sid not in risk_prices or sid not in risk_sectors)
@@ -347,34 +447,22 @@ def plan_orders(
             ):
                 continue
             # 检查所有已有行业，而非仅检查新买单所在行业。
-            existing_sectors: dict[str, Decimal] = {}
+            existing_sectors: dict[str | None, Decimal] = {}
             for sid, amount in notionals.items():
                 existing_sectors[risk_sectors[sid]] = (
                     existing_sectors.get(risk_sectors[sid], Decimal("0")) + amount
                 )
             # 任一已有行业超限时只保留独立卖出路径。
-            if any(
-                amount > risk_nav * Decimal(str(config.max_sector))
-                for amount in existing_sectors.values()
-            ):
+            if sector_exposure_peak(existing_sectors) > risk_nav * Decimal(str(config.max_sector)):
                 continue
             # 持仓名额由实际仓位和待成交买单共同占用。
-            if (
-                risk_quantities.get(security_id, 0) == 0
-                and sum(amount > 0 for amount in risk_quantities.values()) >= config.max_positions
-            ):
+            if risk_quantities.get(security_id, 0) == 0 and sum(
+                amount > 0 for amount in risk_quantities.values()
+            ) >= position_limit(config):
                 # 卖单实际成交前不释放名额。
                 continue
-            # 仅汇总本单所在行业已经占用的美元市值；无同业持仓时 Decimal("0")
-            # 使空集合仍以金额类型参与后面的行业余额运算。
-            sector_used_now = sum(
-                (
-                    amount
-                    for sid, amount in notionals.items()
-                    if risk_sectors[sid] == risk_sectors[security_id]
-                ),
-                Decimal("0"),
-            )
+            # 未知候选必须容纳最拥挤行业，已知候选也须预留所有未知分类的风险。
+            sector_used_now = sector_committed(existing_sectors, risk_sectors[security_id])
             # 总仓位、行业与单票剩余额度取最小值。
             exposure_room = max(
                 Decimal("0"),
@@ -419,6 +507,10 @@ def plan_orders(
             client_order_id=identity,
             account_id=account.account_id,
             decision_id=target.decision_id,
+            # 策略标签随明确配置保存；订单身份仍由上面的决策和数量基线决定。
+            strategy_version=(
+                "ma-trend-1.0.0" if config.strategy == "ma-trend" else "weekly-two-factor-1.0.0"
+            ),
             security_id=security_id,
             side=side,
             quantity=quantity,

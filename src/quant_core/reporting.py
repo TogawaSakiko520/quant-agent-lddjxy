@@ -1,6 +1,7 @@
 """从结构化事实生成中文解释报告；不调用 LLM、不编造买卖原因、不改写交易事实。"""
 
 import json
+from typing import Literal
 
 from quant_core.contracts import (
     AccountSnapshot,
@@ -25,6 +26,8 @@ def render_report(
     account: AccountSnapshot,
     reconciliation: ReconciliationResult,
     alerts: list[Alert],
+    *,
+    mode: Literal["offline", "paper"] = "offline",
 ) -> str:
     """把输入、评分、目标、订单和账户事实排成 Markdown；金额美元、数量股。
 
@@ -32,14 +35,17 @@ def render_report(
     身份或时点一致性，只组织并返回文本，不写文件。当前 report_run 在重生报告前
     先调用 validate_run 校验运行证据，再把留存对象传到这里。
     """
+    ma = signals.strategy_version == "ma-trend-1.0.0"
     # 字典展示必须显式排序，不能依赖内存构造或JSON读回的插入顺序。
     regime_evidence = json.dumps(regime.evidence, ensure_ascii=False, sort_keys=True)
     exclusions = json.dumps(signals.excluded, ensure_ascii=False, sort_keys=True)
     # 固定报告头部说明工程证据的适用边界。
     lines = [
-        "# quant-core 离线工程解释报告",
+        "# quant-core 离线工程解释报告" if mode == "offline" else "# Alpaca Paper 策略解释报告",
         "",
-        "> 合成数据与 FakeBroker 只证明工程链路，不是正式回测、收益证据或实盘授权。",
+        "> 合成数据与 FakeBroker 只证明工程链路，不是正式回测、收益证据或实盘授权。"
+        if mode == "offline"
+        else "> Paper 计划、委托与成交分别记录；未成交或对账失败不代表闭环完成，不能推断实盘收益。",
         "",
         f"决策：`{signals.decision_id}`；截止时间：{signals.decision_time.isoformat()}。",
         f"快照：`{snapshot.snapshot_id}`；内容哈希：`{snapshot.content_hash}`。",
@@ -47,22 +53,36 @@ def render_report(
         "",
         "## 因子与评分",
         "",
-        "动量 = P[t-21]/P[t-252]-1（253个价格）；低波动 = -std(r, ddof=1)×√252（61个价格）。",
-        "百分位按平均并列名次计算，两个因子固定等权；排名不是收益预测。",
+        "MA5/MA20为最后5/20个完整交易日的仅拆股调整收盘均价；MA5>MA20入选，强度=MA5/MA20-1。"
+        if ma
+        else "动量 = P[t-21]/P[t-252]-1（253个价格）；低波动 = -std(r, ddof=1)×√252（61个价格）。",
+        "策略ma-trend-1.0.0：仅强度贡献评分，单候选评分1；价格趋势不含股息再投资，未知行业按最坏集中度约束。"
+        if ma
+        else "百分位按平均并列名次计算，两个因子固定等权；排名不是收益预测。",
         "",
-        "| 证券 | 动量原值 | 低波动原值 | 动量百分位 | 低波动百分位 | 综合分 |",
-        "|---|---:|---:|---:|---:|---:|",
+        "| 证券 | MA5 USD | MA20 USD | 趋势强度 | 评分 |"
+        if ma
+        else "| 证券 | 动量原值 | 低波动原值 | 动量百分位 | 低波动百分位 | 综合分 |",
+        "|---|---:|---:|---:|---:|" if ma else "|---|---:|---:|---:|---:|---:|",
     ]
     # 本函数的 values 是 (证券 ID, 因子 ID)→原始因子值，仅用于展示，不重新算因子。
     # get 缺键保持 None，与缺失数值一样明确展示；不能从百分位反推原值或把缺失填零。
     values = {(item.security_id, item.factor_id): item.value for item in factors}
-    for score in signals.scores:
-        momentum = values.get((score.security_id, "momentum"))
-        # 低波动缺失不得替换成零。
-        low_vol = values.get((score.security_id, "low_volatility"))
-        lines.append(
-            f"| {score.security_id} | {momentum} | {low_vol} | {score.components.get('momentum')} | {score.components.get('low_volatility')} | {score.value:.6f} |"
-        )
+    if ma:
+        # 所有已计算候选都展示原值；未入选没有评分，不能用0冒充计算结果。
+        scores_by_id = {row.security_id: row.value for row in signals.scores}
+        for sid in sorted({row.security_id for row in factors}):
+            lines.append(
+                f"| {sid} | {values.get((sid, 'ma5'))} | {values.get((sid, 'ma20'))} | {values.get((sid, 'ma_trend'))} | {scores_by_id.get(sid)} |"
+            )
+    else:
+        for score in signals.scores:
+            momentum = values.get((score.security_id, "momentum"))
+            # 低波动缺失不得替换成零。
+            low_vol = values.get((score.security_id, "low_volatility"))
+            lines.append(
+                f"| {score.security_id} | {momentum} | {low_vol} | {score.components.get('momentum')} | {score.components.get('low_volatility')} | {score.value:.6f} |"
+            )
     # 排除理由也属于完整解释链。
     lines.extend(
         [
@@ -79,7 +99,7 @@ def render_report(
     # 展示计划与事实。这里只遍历 target.positions，不能据此认定目标外没有实际持仓。
     for position in target.positions:
         lines.append(
-            f"| {position.security_id} | {position.sector} | {position.weight:.2%} | {position.quantity} | {account.positions.get(position.security_id, 0)} | {position.reason} |"
+            f"| {position.security_id} | {position.sector or '未知（最坏集中度计量）'} | {position.weight:.2%} | {position.quantity} | {account.positions.get(position.security_id, 0)} | {position.reason} |"
         )
     # 展示保留现金与未能完成目标的原因。
     lines.extend(
@@ -119,7 +139,9 @@ def render_report(
     lines.extend(
         [
             "",
-            "原始数据见 inputs/market.parquet；完整因子、评分、目标、订单、成交事件分别见同目录 JSON 文件。",
+            "原始数据见 inputs/market.parquet；完整因子、评分、目标、订单、成交事件分别见同目录 JSON 文件。"
+            if mode == "offline"
+            else "原始数据与来源见计划目录 bars.json、assets.json 及策略对应的补充证据；MA另见split-bars.json、identity-evidence.json、corporate-actions.json。订单及核对见本次观察目录。",
             "复现含义是固定输入重算与已有事件回放，不代表能重复取得真实市场成交价。",
             "",
         ]

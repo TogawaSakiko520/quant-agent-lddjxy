@@ -4,15 +4,17 @@ CLI 将配置和目录交给本模块；本模块把行情→因子→评分→�
 演示/回放生成新运行，校验只读原产物并借临时库重算，研究另存实验，不把报告当交易事实。
 """
 
+import json
 import platform
 import shutil
 import subprocess
-from datetime import date, datetime, timedelta
+from collections.abc import Callable
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from importlib.metadata import version
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from quant_core.adapters.calendar import ExchangeCalendar, FixedClock
 from quant_core.adapters.datasets import fixture_quotes, generate_fixture
@@ -59,6 +61,17 @@ from quant_core.reporting import render_report
 from quant_core.research import evaluate_research, label_observations, rolling_splits
 from quant_core.risk import assess_order
 from quant_core.signals import score_factors
+
+if TYPE_CHECKING:
+    from quant_core.adapters.alpaca import AlpacaSDKTransport
+    from quant_core.adapters.alpaca_data import AlpacaCalendar
+    from quant_core.contracts import (
+        Clock,
+        PaperConfig,
+        PaperQueueTestContext,
+        QueuePreflightRejectionProof,
+        Quote,
+    )
 
 # 完整运行必须具有这些事实文件，空哈希清单不能被当成成功校验。
 REQUIRED_ARTIFACTS = frozenset(
@@ -124,7 +137,7 @@ def code_evidence() -> dict[str, str | bool]:
 
 def runtime_evidence() -> dict[str, str]:
     """收集已安装 Python、依赖版本和锁文件哈希；缺锁明确标为 unavailable。"""
-    packages = ("numpy", "pandas", "pydantic", "pyarrow", "exchange-calendars")
+    packages = ("numpy", "pandas", "pydantic", "pyarrow", "exchange-calendars", "alpaca-py")
     result = {package: version(package) for package in packages}
     result.update(python=platform.python_version(), platform=platform.platform())
     lock = Path(__file__).resolve().parents[2] / "uv.lock"
@@ -744,3 +757,897 @@ def research_run(root: Path) -> dict[str, Any]:
             {"status": "failed", "error_type": type(exc).__name__, "message": str(exc)},
         )
         raise
+
+
+def paper_read(
+    config: "PaperConfig", output: Path, transport: "AlpacaSDKTransport", clock: "Clock"
+) -> dict[str, Any]:
+    """采集真实 Paper 只读证据；不启用写能力，数据不足也保存明确阻塞原因。
+
+    凭据和账户必须由用户先指定。输出目录全新；每类响应完整取得后追加保存，
+    行情失败只影响数据资格，不以 FakeBroker 或合成资料替代。此处尚未运行策略。
+    """
+    from quant_core.adapters.alpaca import AlpacaPaperBroker
+    from quant_core.adapters.alpaca_data import NEW_YORK, fetch_corporate_actions, fetch_daily_bars
+
+    output.mkdir(parents=True, exist_ok=False)
+    at = clock.now()
+    broker = AlpacaPaperBroker(
+        transport,
+        config.account_id,
+        clock,
+        {symbol: symbol for symbol in config.candidates},
+        lambda: [],
+        at,
+    )
+    raw = broker.read_snapshot()
+    write_json(output / "account-observation.json", raw)
+    write_json(output / "config.json", config.model_dump(mode="json"))
+    assets = broker.assets()
+    write_json(output / "assets.json", assets)
+    calendar_end = max(config.history_end, at.date()) + timedelta(days=14)
+    calendar = broker.calendar(config.history_start, calendar_end)
+    write_json(output / "calendar.json", calendar)
+    write_json(output / "clock.json", transport.request("GET", "/clock"))
+    blockers = (
+        ["需要绑定当前普通股身份，MA使用仅拆股价格；未知行业按最坏情况计量"]
+        if config.strategy == "ma-trend"
+        else ["需要可追溯普通股类别、行业与股息再投资总回报资料"]
+    )
+    if raw["positions"] or any(
+        row.get("status") not in {"filled", "canceled", "expired", "rejected", "replaced"}
+        for row in raw["orders"]
+    ):
+        blockers.append("本次最小建仓入口要求初态无持仓和开放订单；现有事实原样保留")
+    try:
+        bars = fetch_daily_bars(
+            transport,
+            config.candidates,
+            config.history_start,
+            config.history_end,
+            config.history_feed,
+            asof=at.astimezone(NEW_YORK).date(),
+        )
+        write_json(output / "bars.json", bars)
+        if config.strategy == "ma-trend":
+            # 价格序列与原始成交量分开保存，调整价绝不冒充总回报或执行报价。
+            split_bars = fetch_daily_bars(
+                transport,
+                config.candidates,
+                config.history_start,
+                config.history_end,
+                config.history_feed,
+                adjustment="split",
+                asof=at.astimezone(NEW_YORK).date(),
+            )
+            write_json(output / "split-bars.json", split_bars)
+            actions = fetch_corporate_actions(
+                transport, config.candidates, config.history_start, at.astimezone(NEW_YORK).date()
+            )
+            actions["observed_at"] = clock.now().isoformat()
+            write_json(output / "corporate-actions.json", actions)
+        write_json(
+            output / "data-requests.json",
+            {
+                "symbols": config.candidates,
+                "start": str(config.history_start),
+                "end": str(config.history_end),
+                "asof": str(at.astimezone(NEW_YORK).date()),
+                "feed": config.history_feed,
+                "timeframe": "1Day",
+                "adjustments": ["raw", "split"] if config.strategy == "ma-trend" else ["raw"],
+            },
+        )
+        history = "received_sip_raw"
+    except (ConnectionError, TimeoutError, ContractError) as exc:
+        history = "blocked"
+        blockers.append(f"历史行情未合格：{type(exc).__name__}:{exc}")
+    result = {
+        "status": "read_only",
+        "account_verified": True,
+        "history": history,
+        "observed_at": clock.now().isoformat(),
+        "calendar_end": str(calendar_end),
+        "blockers": blockers,
+        "code": code_evidence(),
+        "environment": runtime_evidence(),
+    }
+    write_json(output / "read-result.json", result)
+    return result
+
+
+def paper_plan(
+    source: Path, supplement_path: Path | None, output: Path, *, identity_path: Path | None = None
+) -> dict[str, Any]:
+    """从留存的真实读取和补充证据计算原因子、评分及目标，完全离线且不下单。
+
+    只支持首次空仓账户；固定预算建立独立策略资金视图，未分配远端现金单列。
+    补充数据方法须经人工核实；模型校验不等于供应商质量认证。
+    """
+    from quant_core.adapters.alpaca_data import (
+        NEW_YORK,
+        AlpacaCalendar,
+        build_ma_snapshot,
+        build_paper_snapshot,
+    )
+    from quant_core.contracts import PaperConfig, Quote
+    from quant_core.factors import calculate_ma_factors
+    from quant_core.signals import score_ma_factors
+
+    config = PaperConfig.model_validate(read_json(source / "config.json"))
+    raw = read_json(source / "account-observation.json")
+    meta = read_json(source / "read-result.json")
+    if raw["positions"] or any(
+        row.get("status") not in {"filled", "canceled", "expired", "rejected", "replaced"}
+        for row in raw["orders"]
+    ):
+        raise ContractError("初态有持仓或未完成订单；不重置、不撤销，请使用独立空仓 Paper 账户")
+    if raw["account"]["id"] != config.account_id:
+        raise ContractError("只读证据账户与配置不一致")
+    cash = Decimal(raw["account"]["cash"])
+    buying_power = Decimal(raw["account"]["non_marginable_buying_power"])
+    if config.budget > min(cash, buying_power):
+        raise ContractError("策略预算超过远端现金或非保证金购买力")
+    at = datetime.fromisoformat(meta["observed_at"])
+    supplement = read_json(supplement_path) if supplement_path is not None else None
+    # 传统双因子仍要求真实总回报和分类；MA从独立价格口径构建，不能静默改公式。
+    if config.strategy == "weekly-two-factor":
+        if supplement is None:
+            raise ContractError("原双因子需要--supplement总回报和行业资料")
+        if datetime.fromisoformat(supplement["available_at"]) > at:
+            raise ContractError("补充资料晚于读取时点，请重新执行只读采集形成新决策")
+    calendar = AlpacaCalendar(
+        read_json(source / "calendar.json"),
+        config.history_start,
+        date.fromisoformat(meta["calendar_end"]),
+    )
+    latest = [
+        day
+        for day in calendar.sessions(config.history_start, at.astimezone(NEW_YORK).date())
+        if calendar.close_at(day) <= at
+    ][-1]
+    following = calendar.next_session(latest)
+    data_excluded: dict[str, str] = {}
+    identity: dict[str, Any] | None = None
+    if config.strategy == "weekly-two-factor":
+        if latest.isocalendar()[:2] == following.isocalendar()[:2] or at >= calendar.open_at(
+            following
+        ):
+            raise ContractError("本次采集不在原周频策略的周末决策窗口")
+        snapshot = build_paper_snapshot(
+            bars=read_json(source / "bars.json"),
+            assets=read_json(source / "assets.json"),
+            supplement=supplement,
+            calendar=calendar,
+            observed_at=at,
+            decision_time=at,
+            candidates=config.candidates,
+        )
+    else:
+        if identity_path is None:
+            raise ContractError("MA计划需要--identity-evidence当前普通股身份来源")
+        identity = read_json(identity_path)
+        snapshot, data_excluded = build_ma_snapshot(
+            bars=read_json(source / "bars.json"),
+            split_bars=read_json(source / "split-bars.json"),
+            assets=read_json(source / "assets.json"),
+            identity_evidence=identity,
+            corporate_actions=read_json(source / "corporate-actions.json"),
+            calendar=calendar,
+            observed_at=at,
+            decision_time=at,
+            candidates=config.candidates,
+        )
+    initial = AccountSnapshot(
+        account_id=config.account_id,
+        as_of=at,
+        cash=config.budget,
+        available_cash=config.budget,
+    )
+    quotes = {
+        row.security_id: Quote(
+            security_id=row.security_id,
+            at=row.event_time,
+            price=Decimal(str(row.raw_close)),
+        )
+        for row in snapshot.records
+        if row.session == latest
+    }
+    if config.strategy == "ma-trend":
+        factors = calculate_ma_factors(snapshot, calendar)
+        signals = score_ma_factors(snapshot, factors)
+        signals = SignalSet.model_validate(
+            {**signals.model_dump(), "excluded": {**data_excluded, **signals.excluded}}
+        )
+    else:
+        factors = calculate_factors(snapshot, calendar)
+        signals = score_factors(snapshot, factors)
+    target = build_portfolio(signals, initial, quotes, snapshot.securities, config)
+    regime = assess_regime([], at, calendar)
+    output.mkdir(parents=True, exist_ok=False)
+    for name in (
+        "config.json",
+        "calendar.json",
+        "assets.json",
+        "bars.json",
+        "read-result.json",
+        "account-observation.json",
+        "clock.json",
+    ):
+        write_json(output / name, read_json(source / name))
+    if supplement is not None:
+        write_json(output / "supplement.json", supplement)
+    if identity is not None:
+        write_json(output / "identity-evidence.json", identity)
+    for extra in ("split-bars.json", "corporate-actions.json", "data-requests.json"):
+        if (source / extra).is_file():
+            write_json(output / extra, read_json(source / extra))
+    write_json(
+        output / "data-qualification.json",
+        {
+            "strategy": config.strategy,
+            "signal_session": str(latest),
+            "qualified": [row.security_id for row in snapshot.securities],
+            "excluded": data_excluded,
+            "price_basis": "split_adjusted" if config.strategy == "ma-trend" else "total_return",
+            "unknown_sector_policy": "worst_case" if config.strategy == "ma-trend" else "reject",
+        },
+    )
+    for name, model in (
+        ("snapshot", snapshot),
+        ("signals", signals),
+        ("target", target),
+        ("initial", initial),
+        ("regime", regime),
+    ):
+        write_json(output / f"{name}.json", model.model_dump(mode="json"))
+    write_json(output / "factors.json", [row.model_dump(mode="json") for row in factors])
+    (output / "report.md").write_text(
+        render_report(
+            snapshot,
+            factors,
+            signals,
+            regime,
+            target,
+            [],
+            initial,
+            ReconciliationResult(as_of=at, matched=False, differences=["execution_not_started"]),
+            [],
+            mode="paper",
+        ),
+        encoding="utf-8",
+    )
+    files = {path.name: hash_file(path) for path in output.iterdir() if path.is_file()}
+    evidence = {
+        "files": files,
+        "reserve": str(cash - config.budget),
+        "eligible_at": max(at, calendar.open_at(following)).isoformat(),
+        "expires_at": calendar.close_at(following).isoformat(),
+        "code": code_evidence(),
+        "environment": runtime_evidence(),
+    }
+    plan_id = canonical_hash(evidence)
+    write_json(output / "paper-plan.json", {"plan_id": plan_id, **evidence})
+    return {
+        "status": "planned" if target.positions else "no_target",
+        "plan_id": plan_id,
+        "scores": len(signals.scores),
+        "positions": len(target.positions),
+        "budget": str(config.budget),
+        "eligible_at": evidence["eligible_at"],
+        "orders_submitted": False,
+    }
+
+
+def _paper_quotes(
+    transport: "AlpacaSDKTransport", securities: list[SecurityRecord], feed: str
+) -> dict[str, "Quote"]:
+    """读取原始最新卖价供首次买入执行；保留报价时间，不把抓取时间当作新鲜度。"""
+    from quant_core.contracts import Quote
+
+    response = transport.market_request(
+        "/v2/stocks/quotes/latest",
+        {"symbols": ",".join(row.ticker for row in securities), "feed": feed},
+    )
+    result = {}
+    for security in securities:
+        raw = response["quotes"][security.ticker]
+        result[security.security_id] = Quote(
+            security_id=security.security_id,
+            at=datetime.fromisoformat(raw["t"].replace("Z", "+00:00")),
+            price=Decimal(str(raw["ap"])),
+            tradable=security.tradable,
+        )
+    return result
+
+
+def _paper_queue_order(
+    snapshot: DataSnapshot,
+    target: TargetPortfolio,
+    plan: dict[str, Any],
+    transport: "AlpacaSDKTransport",
+    clock: "Clock",
+    calendar: "AlpacaCalendar",
+    config: "PaperConfig",
+) -> tuple["PaperQueueTestContext", OrderIntent, dict[str, "Quote"], dict[str, float]]:
+    """为休市撤单验收准备首个策略目标的一股；不另选股票或伪造实时行情。
+
+    参考价来自冻结快照的最后完整原始日线，时点保留实际收盘和采集时间；
+    远端时钟及资产必须重新读取。这里只形成意图，发单仍经唯一执行服务。
+    """
+    from decimal import ROUND_DOWN
+
+    from quant_core.contracts import PaperQueueTestContext, Quote
+    from quant_core.portfolio import order_fee
+
+    if not target.positions:
+        raise RiskBlocked("策略没有目标，不能任意指定测试股票")
+    position = target.positions[0]
+    security = next(row for row in snapshot.securities if row.security_id == position.security_id)
+    asset = transport.request("GET", f"/assets/{security.ticker}")
+    if (
+        asset.get("id") != security.security_id
+        or asset.get("symbol") != security.ticker
+        or asset.get("status") != "active"
+        or asset.get("tradable") is not True
+    ):
+        raise RiskBlocked("测试证券当前身份或交易资格已改变")
+    remote_clock = transport.request("GET", "/clock")
+    if remote_clock.get("is_open") is not False:
+        raise RiskBlocked("休市撤单测试不允许在开市时发单")
+    remote_at = datetime.fromisoformat(remote_clock["timestamp"])
+    if remote_at.utcoffset() is None:
+        raise ContractError("远端时钟必须明确时区，不能按本机时区猜测")
+    now = clock.now()
+    completed = [
+        day
+        for day in calendar.sessions(config.history_start, now.date())
+        if calendar.close_at(day) <= now
+    ]
+    if not completed:
+        raise RiskBlocked("没有完整交易日可作为排队测试参考")
+    session = completed[-1]
+    rows = [
+        row
+        for row in snapshot.records
+        if row.security_id == security.security_id and row.session == session
+    ]
+    if len(rows) != 1 or rows[0].quality != "good":
+        raise RiskBlocked("最新完整交易日原始参考价缺失或不唯一")
+    reference = rows[0]
+    next_open = calendar.open_at(calendar.next_session(session))
+    if datetime.fromisoformat(remote_clock["next_open"]) != next_open:
+        raise RiskBlocked("远端下一开盘与保存日历不一致")
+    price = Decimal(str(reference.raw_close))
+    tick = Decimal("0.01") if price >= 1 else Decimal("0.0001")
+    client_id = (
+        "queue-" + canonical_hash({"plan": plan["plan_id"], "security": security.security_id})[:32]
+    )
+    context = PaperQueueTestContext(
+        plan_id=plan["plan_id"],
+        decision_id=target.decision_id,
+        account_id=config.account_id,
+        security_id=security.security_id,
+        client_order_id=client_id,
+        reference_session=session,
+        reference_close=price,
+        reference_close_at=calendar.close_at(session),
+        reference_observed_at=reference.available_at,
+        # Alpaca时钟带纽约偏移；仅转换同一真实时刻为契约UTC，不改为本地抓取时间。
+        remote_clock_at=remote_at.astimezone(UTC),
+        remote_is_open=remote_clock["is_open"],
+        next_open=next_open,
+    )
+    intent = OrderIntent(
+        client_order_id=client_id,
+        account_id=config.account_id,
+        decision_id=target.decision_id,
+        security_id=security.security_id,
+        side="BUY",
+        quantity=1,
+        limit_price=price.quantize(tick, rounding=ROUND_DOWN),
+        reserved_fee=order_fee(1, config),
+        created_at=now,
+        eligible_at=next_open,
+        strategy_version="ma-trend-1.0.0",
+    )
+    quotes = {
+        security.security_id: Quote(
+            security_id=security.security_id, at=context.reference_close_at, price=price
+        )
+    }
+    volumes = [
+        row.volume
+        for row in snapshot.records
+        if row.security_id == security.security_id and row.session in completed[-20:]
+    ]
+    if len(volumes) != 20:
+        raise RiskBlocked("排队测试仍需完整20日原始成交量")
+    return context, intent, quotes, {security.security_id: sum(volumes) / 20}
+
+
+def _queue_unsent_proof(root: Path, legacy_source: Path) -> "QueuePreflightRejectionProof":
+    """核验已知旧版预提交失败的完整源码和观察材料，不以远端404代替未发送证明。"""
+    from quant_core.contracts import QueuePreflightRejectionProof
+
+    # 旧代码树必须精确匹配失败时的封印；缺文件、增文件或代码差异都不能用此维护。
+    paths = sorted(
+        [
+            *legacy_source.glob("src/**/*.py"),
+            *legacy_source.glob("tools/**/*.py"),
+            *legacy_source.glob("configs/*.toml"),
+        ]
+    )
+    hashes = {str(path.relative_to(legacy_source)): hash_file(path) for path in paths}
+    source_hash = canonical_hash(hashes)
+    original = root / "observations/0001"
+    plan = read_json(root / "paper-plan.json")
+    authorization = read_json(original / "authorization-boundaries.json")
+    failure = read_json(original / "failure.json")
+    marker = read_json(root / "queue-test.json")
+    if (
+        plan["code"]["source_hash"] != source_hash
+        or authorization["current_code"]["source_hash"] != source_hash
+        or authorization.get("approved_plan") != plan["plan_id"]
+        or authorization.get("queue_cancel_test") is not True
+        or authorization.get("max_orders") != 1
+        or authorization.get("unfilled") != "cancel"
+        or failure.get("type") != "ContractError"
+        or marker.get("plan_id") != plan["plan_id"]
+        or (original / "queue-submission.json").exists()
+    ):
+        raise ContractError("原始观察不能证明此旧版意图在POST前被拒绝")
+    evidence = {
+        "source_files": hashes,
+        "plan": plan,
+        "authorization": authorization,
+        "failure": failure,
+        "marker": marker,
+    }
+    return QueuePreflightRejectionProof.model_validate(
+        {
+            "plan_id": plan["plan_id"],
+            "client_order_id": marker["client_order_id"],
+            "failed_source_hash": source_hash,
+            "failure_reason": failure["reason"],
+            "evidence_hash": canonical_hash(evidence),
+        }
+    )
+
+
+def paper_execute(
+    root: Path,
+    transport: "AlpacaSDKTransport",
+    clock: "Clock",
+    *,
+    approved_plan: str,
+    max_orders: int,
+    max_order_notional: Decimal,
+    unfilled: str,
+    recover_only: bool = False,
+    queue_cancel_test: bool = False,
+    confirm_unsent_source: Path | None = None,
+    observe_seconds: int = 0,
+    cancel_observe_seconds: int = 60,
+    wait: Callable[[float], None] | None = None,
+    monotonic: Callable[[], float] | None = None,
+) -> dict[str, Any]:
+    """在已获用户批准的计划边界内单次执行或恢复；唯一写入口仍是 ExecutionService。
+
+    调用方必须已确认候选、资金预算、订单边界及未成交处理。重启使用同一目录，
+    不重新分配现金、不重写计划、不为 UNKNOWN 换身份。每次观察写新子目录。
+    非终态不等待伪造完成；调用方之后可显式恢复，超出首个执行日禁止普通新单。
+    queue_cancel_test 是独立获准的休市订单操作测试：只取一个策略目标的一股，
+    用真实收盘参考价排队后立即撤销；它不证明常规策略成交或收益，默认关闭。
+    """
+    # 等待仅属于应用边界；测试注入计时器，核心不读取真实时间或等待网络。
+    from time import monotonic as system_monotonic
+    from time import sleep
+
+    from quant_core.adapters.alpaca import AlpacaPaperBroker
+    from quant_core.adapters.alpaca_data import AlpacaCalendar
+    from quant_core.adapters.paper_session import BudgetBroker
+    from quant_core.contracts import PaperConfig
+
+    wait = sleep if wait is None else wait
+    monotonic = system_monotonic if monotonic is None else monotonic
+    if not 0 <= observe_seconds <= 300 or not 0 <= cancel_observe_seconds <= 60:
+        raise ContractError("观察仅允许0至300秒，撤单核对仅允许0至60秒")
+    plan = read_json(root / "paper-plan.json")
+    payload = {key: value for key, value in plan.items() if key != "plan_id"}
+    if approved_plan != plan["plan_id"] or canonical_hash(payload) != approved_plan:
+        raise ContractError("批准的计划身份与输入不一致")
+    if validate_artifacts(root, plan["files"]):
+        raise ContractError("Paper 计划输入已改变")
+    if not recover_only and plan["code"]["source_hash"] != code_evidence()["source_hash"]:
+        raise ContractError("计划后源码已改变，需重新检查并批准新计划")
+    if (
+        unfilled not in {"keep", "cancel"}
+        or max_orders < 1
+        or not max_order_notional.is_finite()
+        or max_order_notional <= 0
+    ):
+        raise ContractError("必须明确订单数量、金额边界和未成交处理方式")
+    config = PaperConfig.model_validate(read_json(root / "config.json"))
+    if config.strategy == "ma-trend" and (max_orders > 3 or max_order_notional > Decimal("500")):
+        raise ContractError("MA本轮授权边界为最多3笔且每笔含费用不超过500 USD")
+    queue_marker = root / "queue-test.json"
+    queue_mode = queue_cancel_test or queue_marker.exists()
+    if queue_mode:
+        if config.strategy != "ma-trend" or max_orders != 1 or unfilled != "cancel":
+            raise ContractError("休市排队测试仅允许MA、最多一笔且必须撤销余单")
+        if not recover_only and not queue_cancel_test:
+            raise ContractError("排队测试目录不能转为普通策略发单；只能显式恢复或同模式核对")
+        if queue_marker.exists() and read_json(queue_marker)["plan_id"] != approved_plan:
+            raise ContractError("排队测试与批准计划不一致")
+    initial = AccountSnapshot.model_validate(read_json(root / "initial.json"))
+    snapshot = DataSnapshot.model_validate(read_json(root / "snapshot.json"))
+    target = TargetPortfolio.model_validate(read_json(root / "target.json"))
+    meta = read_json(root / "read-result.json")
+    calendar = AlpacaCalendar(
+        read_json(root / "calendar.json"),
+        config.history_start,
+        date.fromisoformat(meta["calendar_end"]),
+    )
+    store = SQLiteEventStore(root / "internal.sqlite", initial)
+    if queue_mode:
+        if store.orders() and not queue_marker.exists():
+            raise ContractError("已有普通订单的目录不能转为排队测试")
+        if queue_marker.exists() and any(
+            row.intent.client_order_id != read_json(queue_marker).get("client_order_id")
+            for row in store.orders()
+        ):
+            raise ContractError("排队测试目录存在未绑定的订单，禁止操作")
+    broker = AlpacaPaperBroker(
+        transport,
+        config.account_id,
+        clock,
+        {row.security_id: row.ticker for row in snapshot.securities},
+        lambda: [row.intent for row in store.orders()],
+        initial.as_of,
+        trading_enabled=True,
+        baseline_activities=read_json(root / "account-observation.json")["activities"],
+    )
+    scoped = BudgetBroker(
+        broker,
+        Decimal(plan["reserve"]),
+        set(broker.symbols),
+        max_orders,
+        max_order_notional,
+    )
+    service = ExecutionService(store, scoped, clock, config, calendar)
+    attempt = root / "observations" / f"{len(list((root / 'observations').glob('*'))) + 1:04d}"
+    attempt.mkdir(parents=True, exist_ok=False)
+    write_json(
+        attempt / "authorization-boundaries.json",
+        {
+            "approved_plan": approved_plan,
+            "max_orders": max_orders,
+            "max_order_notional": str(max_order_notional),
+            "unfilled": unfilled,
+            "recover_only": recover_only,
+            "queue_cancel_test": queue_mode,
+            "observe_seconds": observe_seconds,
+            "cancel_observe_seconds": cancel_observe_seconds,
+            "current_code": code_evidence(),
+        },
+    )
+    if confirm_unsent_source is not None:
+        if not recover_only or not queue_mode:
+            raise ContractError("旧版未发送维护只允许显式恢复排队测试")
+        proof = _queue_unsent_proof(root, confirm_unsent_source)
+        write_json(attempt / "unsent-proof.json", proof.model_dump(mode="json"))
+        # 服务在账户锁内再核验本地日志和远端事实，只追加本地拒绝，不修改账务。
+        service.confirm_queue_not_sent(proof.client_order_id, proof=proof)
+    checked = service.recover()
+    risks: list[dict[str, Any]] = []
+    status = "recovery_only"
+    try:
+        if not checked.matched:
+            raise RiskBlocked("Paper 初次恢复不一致，禁止新增")
+        now = clock.now()
+        if not recover_only and queue_mode:
+            # 已有意图包括未知、拒绝和撤销终态，均只恢复，不能再次生成排队测试订单。
+            if not store.orders():
+                context, intent, quotes, adv = _paper_queue_order(
+                    snapshot, target, plan, transport, clock, calendar, config
+                )
+                write_json(attempt / "queue-context.json", context.model_dump(mode="json"))
+                if not queue_marker.exists():
+                    write_json(
+                        queue_marker,
+                        {
+                            "plan_id": approved_plan,
+                            "purpose": context.purpose,
+                            "client_order_id": context.client_order_id,
+                        },
+                    )
+                # 适配器也只接受该单上下文；不会解除其他订单的开盘资格检查。
+                broker.queue_test_context = context
+                record = service.submit_paper_queue_test(
+                    intent,
+                    quotes,
+                    context=context,
+                    target=target,
+                    security_records=snapshot.securities,
+                    adv=adv,
+                    reference_nav=target.nav,
+                    peak_nav=target.nav,
+                )
+                risks.append(
+                    {
+                        "client_order_id": intent.client_order_id,
+                        "allowed": True,
+                        "status": record.status,
+                        "purpose": context.purpose,
+                    }
+                )
+                # 提交回执与再次查询分别保存。查询不确定时也保留原身份，后面只恢复/撤单。
+                write_json(attempt / "queue-submission.json", record.model_dump(mode="json"))
+                confirmed = broker.query(intent.client_order_id)
+                write_json(
+                    attempt / "queue-query.json",
+                    confirmed.model_dump(mode="json") if confirmed else None,
+                )
+                write_json(attempt / "queue-before-cancel.json", broker.read_snapshot())
+                status = "queue_order_observed"
+        elif not recover_only:
+            if (
+                not datetime.fromisoformat(plan["eligible_at"])
+                <= now
+                < datetime.fromisoformat(plan["expires_at"])
+            ):
+                raise RiskBlocked("市场未到首个执行时段或计划已过期")
+            remote_clock = transport.request("GET", "/clock")
+            if remote_clock.get("is_open") is not True or not calendar.is_open(now):
+                raise RiskBlocked("远端时钟或保存日历显示常规市场未开盘")
+            # 每个执行批次重新检查当前资产可交易属性；行业仍用当时已知补充证据。
+            current_assets = {row["id"]: row for row in broker.assets()}
+            if any(
+                current_assets[row.security_id].get("tradable") is not True
+                or current_assets[row.security_id].get("status") != "active"
+                for row in snapshot.securities
+            ):
+                raise RiskBlocked("当前证券资格已改变")
+            quotes = _paper_quotes(transport, snapshot.securities, config.quote_feed)
+            completed = [
+                day
+                for day in calendar.sessions(config.history_start, snapshot.decision_time.date())
+                if calendar.close_at(day) <= snapshot.decision_time
+            ][-20:]
+            adv = {
+                row.security_id: sum(
+                    record.volume
+                    for record in snapshot.records
+                    if record.security_id == row.security_id and record.session in completed
+                )
+                / 20
+                for row in snapshot.securities
+            }
+            intents = plan_orders(
+                target,
+                store.account(now),
+                store.orders(),
+                quotes,
+                adv,
+                config,
+                now,
+                security_records=snapshot.securities,
+                turnover_used=_turnover(store, target.decision_id),
+            )
+            for intent in intents:
+                # 持久化前适配 Alpaca 最小价格步长：买入只向下舍入，绝不扩大价格风险。
+                # 客户订单身份仅压缩既有稳定键，不因报价变化而换键；已有意图只恢复。
+                tick = Decimal("0.01") if intent.limit_price >= 1 else Decimal("0.0001")
+                from decimal import ROUND_DOWN
+
+                price = intent.limit_price.quantize(tick, rounding=ROUND_DOWN)
+                intent = OrderIntent.model_validate(
+                    {
+                        **intent.model_dump(),
+                        "limit_price": price,
+                        "client_order_id": intent.client_order_id[:40],
+                    }
+                )
+                if any(
+                    row.intent.client_order_id == intent.client_order_id
+                    or (
+                        row.intent.decision_id == intent.decision_id
+                        and row.intent.security_id == intent.security_id
+                        and row.intent.side == intent.side
+                    )
+                    for row in store.orders()
+                ):
+                    # 一次执行每证券只允许一张意图；部分成交后取消也不能隐式重开余量。
+                    continue
+                if len([row for row in store.orders() if row.broker_order_id]) >= max_orders:
+                    status = "order_count_boundary"
+                    break
+                if intent.quantity * intent.limit_price + intent.reserved_fee > max_order_notional:
+                    risks.append(
+                        {
+                            "client_order_id": intent.client_order_id,
+                            "allowed": False,
+                            "reasons": ["approval_notional_boundary"],
+                        }
+                    )
+                    continue
+                # 报价在每单前更新，时效仍由原风控检查。失败不改预算或放宽原参数。
+                quotes = _paper_quotes(transport, snapshot.securities, config.quote_feed)
+                try:
+                    record = service.submit(
+                        intent,
+                        quotes,
+                        target=target,
+                        security_records=snapshot.securities,
+                        adv=adv,
+                        reference_nav=target.nav,
+                        peak_nav=target.nav,
+                    )
+                    risks.append(
+                        {
+                            "client_order_id": intent.client_order_id,
+                            "allowed": True,
+                            "status": record.status,
+                        }
+                    )
+                    status = "orders_observed"
+                    if record.status == "UNKNOWN":
+                        break
+                except RiskBlocked as exc:
+                    risks.append(
+                        {
+                            "client_order_id": intent.client_order_id,
+                            "allowed": False,
+                            "reasons": [str(exc)],
+                        }
+                    )
+            if not intents:
+                status = "no_orders"
+        checked = service.recover()
+        # 一次授权批次只发送前面的目标；观察期间只读取，不追单、改单或补发余量。
+        if not recover_only and observe_seconds and not queue_mode:
+            deadline = monotonic() + observe_seconds
+            while checked.matched and any(
+                row.status not in {"FILLED", "REJECTED", "CANCELED"} for row in store.orders()
+            ):
+                remaining = deadline - monotonic()
+                if remaining <= 0:
+                    break
+                wait(min(5.0, remaining))
+                checked = service.recover()
+        if unfilled == "cancel" and checked.matched and not queue_mode:
+            for order in store.orders():
+                if order.status in {"OPEN", "PARTIAL"}:
+                    service.cancel(order.intent.client_order_id)
+            checked = service.recover()
+            # 撤单回执不代表终态；有观察请求才等待，兼容原程序化单次查询入口。
+            if not recover_only and observe_seconds:
+                deadline = monotonic() + cancel_observe_seconds
+                while checked.matched and any(
+                    row.status not in {"FILLED", "REJECTED", "CANCELED"} for row in store.orders()
+                ):
+                    remaining = deadline - monotonic()
+                    if remaining <= 0:
+                        break
+                    wait(min(5.0, remaining))
+                    checked = service.recover()
+    except (RiskBlocked, ContractError, ConnectionError, TimeoutError) as exc:
+        status = "blocked"
+        write_json(attempt / "failure.json", {"type": type(exc).__name__, "reason": str(exc)})
+    finally:
+        if queue_mode:
+            write_json(attempt / "queue-clock-checks.json", broker.queue_clock_samples)
+        # 报告读取内存与持久化事实，不消除差异；取不到远端时仍保存本地待恢复证据。
+        checked = service.recover()
+        if queue_mode:
+            # 排队测试即使提交后取证失败，也在恢复确认身份后尝试撤销本轮单。
+            # 已知本轮单即使现金不一致也可撤销；执行服务核验身份与授权。
+            # 不重复请求CANCEL_PENDING；未知订单保持待恢复，不能盲目重发或假称撤销。
+            try:
+                for order in store.orders():
+                    if order.status in {"OPEN", "PARTIAL"}:
+                        service.cancel(order.intent.client_order_id)
+                checked = service.recover()
+                deadline = monotonic() + cancel_observe_seconds
+                while checked.matched and any(
+                    row.status not in {"FILLED", "REJECTED", "CANCELED"} for row in store.orders()
+                ):
+                    remaining = deadline - monotonic()
+                    if remaining <= 0:
+                        break
+                    wait(min(5.0, remaining))
+                    checked = service.recover()
+            except (RiskBlocked, ContractError, ConnectionError, TimeoutError) as exc:
+                status = "blocked"
+                write_json(
+                    attempt / "cancel-failure.json",
+                    {"type": type(exc).__name__, "reason": str(exc)},
+                )
+                checked = service.recover()
+        if not checked.matched:
+            status = "blocked"
+        account = store.account(clock.now())
+        orders = store.orders()
+        for name, value in (
+            ("account", account.model_dump(mode="json")),
+            ("orders", [row.model_dump(mode="json") for row in orders]),
+            ("events", [row.model_dump(mode="json") for row in store.events()]),
+            ("journal", [row.model_dump(mode="json") for row in store.journal()]),
+            ("reconciliation", checked.model_dump(mode="json")),
+            ("risk", risks),
+        ):
+            write_json(attempt / f"{name}.json", value)
+        try:
+            write_json(attempt / "remote.json", broker.read_snapshot())
+        except (ContractError, ConnectionError, TimeoutError):
+            status = "remote_observation_failed"
+        summary = {
+            "status": status,
+            "reconciled": checked.matched,
+            "submitted": sum(row.broker_order_id is not None for row in orders),
+            "filled": sum(row.status == "FILLED" for row in orders),
+            "pending": sum(
+                row.status in {"OPEN", "PARTIAL", "UNKNOWN", "CANCEL_PENDING"} for row in orders
+            ),
+            "reserve": plan["reserve"],
+            "as_of": clock.now().isoformat(),
+            "execution_purpose": "paper_queue_test" if queue_mode else "strategy",
+            "queue_cancel_verified": queue_mode
+            and checked.matched
+            and len(orders) == 1
+            and orders[0].broker_order_id is not None
+            and orders[0].status == "CANCELED"
+            and orders[0].filled_quantity == 0
+            and account.cash == initial.cash
+            and account.positions == initial.positions,
+            "queue_restart_verified": queue_mode
+            and recover_only
+            and checked.matched
+            and len(orders) == 1
+            and orders[0].broker_order_id is not None
+            and orders[0].status == "CANCELED"
+            and orders[0].filled_quantity == 0
+            and account.cash == initial.cash
+            and account.positions == initial.positions,
+            "filled_and_reconciled": not queue_mode
+            and checked.matched
+            and any(row.status == "FILLED" for row in orders)
+            and all(row.status in {"FILLED", "REJECTED", "CANCELED"} for row in orders),
+            "restart_verified": not queue_mode
+            and recover_only
+            and checked.matched
+            and any(row.status == "FILLED" for row in orders)
+            and all(row.status in {"FILLED", "REJECTED", "CANCELED"} for row in orders),
+            "output": str(attempt),
+        }
+        write_json(attempt / "result.json", summary)
+        factors = [FactorValue.model_validate(row) for row in read_json(root / "factors.json")]
+        signals = SignalSet.model_validate(read_json(root / "signals.json"))
+        regime = RegimeAssessment.model_validate(read_json(root / "regime.json"))
+        (attempt / "report.md").write_text(
+            render_report(
+                snapshot,
+                factors,
+                signals,
+                regime,
+                target,
+                orders,
+                account,
+                checked,
+                [],
+                mode="paper",
+            )
+            + "\n\n内部现金为分配的策略现金，"
+            + f"加未分配现金 {plan['reserve']} USD 后才与远端全部现金比较。\n"
+            + "逐单风险原因见 risk.json；市场状态缺基准保持 UNKNOWN，不改变预算。\n"
+            + (
+                "本次为休市提交/查询/撤单测试，收盘参考价不是实时报价；取消成功不等于成交验收。\n"
+                if queue_mode
+                else ""
+            )
+            + json.dumps(summary, ensure_ascii=False, indent=2)
+            + "\n",
+            encoding="utf-8",
+        )
+    return summary

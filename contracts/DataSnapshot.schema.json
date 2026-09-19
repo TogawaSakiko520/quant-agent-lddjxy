@@ -44,9 +44,16 @@
           "title": "First Seen At"
         },
         "published_at": {
-          "format": "date-time",
-          "title": "Published At",
-          "type": "string"
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Published At"
         },
         "quality": {
           "enum": [
@@ -73,8 +80,11 @@
           "type": "integer"
         },
         "schema_version": {
-          "const": "1.0.0",
-          "default": "1.0.0",
+          "default": "1.1.0",
+          "enum": [
+            "1.0.0",
+            "1.1.0"
+          ],
           "title": "Schema Version",
           "type": "string"
         },
@@ -92,10 +102,31 @@
           "title": "Source",
           "type": "string"
         },
+        "split_adjusted_close": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Split Adjusted Close"
+        },
         "total_return_close": {
-          "exclusiveMinimum": 0,
-          "title": "Total Return Close",
-          "type": "number"
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Return Close"
         },
         "unit": {
           "const": "USD",
@@ -118,7 +149,6 @@
         "session",
         "raw_open",
         "raw_close",
-        "total_return_close",
         "volume"
       ],
       "title": "MarketDataRecord",
@@ -200,9 +230,16 @@
           "type": "boolean"
         },
         "published_at": {
-          "format": "date-time",
-          "title": "Published At",
-          "type": "string"
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Published At"
         },
         "quality": {
           "enum": [
@@ -219,14 +256,24 @@
           "type": "integer"
         },
         "schema_version": {
-          "const": "1.0.0",
-          "default": "1.0.0",
+          "default": "1.1.0",
+          "enum": [
+            "1.0.0",
+            "1.1.0"
+          ],
           "title": "Schema Version",
           "type": "string"
         },
         "sector": {
-          "title": "Sector",
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Sector"
         },
         "security_id": {
           "title": "Security Id",
@@ -293,6 +340,7 @@
     "schema_version": {
       "const": "1.0.0",
       "default": "1.0.0",
+      "pattern": "^1\\.0\\.0$",
       "title": "Schema Version",
       "type": "string"
     },

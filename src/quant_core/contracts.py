@@ -12,7 +12,16 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, ContextManager, Literal, Protocol, Self, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    ValidationInfo,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 # 订单状态包含不确定和撤单中，不能把超时当作拒单。
 OrderStatus = Literal[
@@ -22,6 +31,10 @@ OrderStatus = Literal[
 
 class ContractError(ValueError):
     """输入违反共同契约；调用方必须明确报告并停止依赖该输入的操作。"""
+
+
+class OrderNotSent(ContractError):
+    """适配器证明提交请求尚未发出；仅提交前校验可用，不能包装发送后异常。"""
 
 
 class RiskBlocked(RuntimeError):
@@ -38,7 +51,9 @@ class Contract(BaseModel):
         frozen=True, extra="forbid", validate_default=True, allow_inf_nan=False
     )
     # 公共版本必须精确匹配；新版本需显式迁移。
-    schema_version: Literal["1.0.0"] = "1.0.0"
+    schema_version: str = Field(
+        default="1.0.0", pattern=r"^1\.0\.0$", json_schema_extra={"const": "1.0.0"}
+    )
 
     @field_validator("*", mode="after")
     @classmethod
@@ -47,6 +62,13 @@ class Contract(BaseModel):
         # 日期不携带时区；只有 datetime 字段需要校验 UTC。
         if isinstance(value, datetime) and value.utcoffset() != timedelta(0):
             raise ValueError("时间戳必须明确使用 UTC")
+        # 可空行业属于1.1扩展，不能把新含义伪装成旧版本消息。
+        if (
+            info.field_name == "sector"
+            and value is None
+            and info.data.get("schema_version") == "1.0.0"
+        ):
+            raise ValueError("旧版本行业不得为空")
         # 身份字段不允许空白，否则幂等与证券关联失去意义。
         if isinstance(value, str) and (info.field_name or "").endswith("_id") and not value.strip():
             raise ValueError("身份字段不能为空")
@@ -58,8 +80,8 @@ class StampedRecord(Contract):
 
     # 事件发生或数据所属期间的时间，不代表策略已经可知。
     event_time: datetime
-    # 来源第一次公开该条版本的时间。
-    published_at: datetime
+    # 来源第一次公开该条版本的时间；供应商未提供时保留 None，不以抓取时刻冒充。
+    published_at: datetime | None
     # 本系统实际首次观测时间；历史未知时诚实留空。
     first_seen_at: datetime | None = None
     # 策略可以使用该版本的最早时间。
@@ -80,13 +102,17 @@ class StampedRecord(Contract):
     def validate_availability(self) -> Self:
         """核验公开→实际观测→策略可用的先后；actual 依据缺观测证据时抛 ValueError。"""
         # 策略不可能在来源公开之前使用此版本。
-        if self.available_at < self.published_at:
+        if self.published_at is not None and self.available_at < self.published_at:
             raise ValueError("available_at 不得早于 published_at")
         # 真实到达依据必须保留实际观测记录。
         if self.availability_basis == "actual" and self.first_seen_at is None:
             raise ValueError("actual 依据必须提供 first_seen_at")
         # 本系统仅处理公开材料，观测时间不能早于来源公开。
-        if self.first_seen_at is not None and self.first_seen_at < self.published_at:
+        if (
+            self.first_seen_at is not None
+            and self.published_at is not None
+            and self.first_seen_at < self.published_at
+        ):
             raise ValueError("first_seen_at 不得早于 published_at")
         # 已知到达时间不能晚于声明的可用时间。
         if self.first_seen_at is not None and self.first_seen_at > self.available_at:
@@ -97,11 +123,14 @@ class StampedRecord(Contract):
 class SecurityRecord(StampedRecord):
     """历史证券主表版本；有效区间和可用时间共同限制历史查询。"""
 
+    # 1.1 明确允许未知行业；旧非空行业消息仍可读取。
+    schema_version: Literal["1.0.0", "1.1.0"] = "1.1.0"
+
     # 稳定身份不随股票代码变化。
     security_id: str
     # 股票代码只用于该有效区间的展示和适配。
     ticker: str
-    sector: str
+    sector: str | None
     # 证券状态开始生效的交易日。
     effective_from: date
     # 结束日期不包含当天；空值表示尚无已知终点。
@@ -119,6 +148,7 @@ class SecurityRecord(StampedRecord):
 class MarketDataRecord(StampedRecord):
     """交易日原始行情及独立研究价格；价格单位美元，成交量单位股。"""
 
+    schema_version: Literal["1.0.0", "1.1.0"] = "1.1.0"
     security_id: str
     # 纽约市场交易日标签。
     session: date
@@ -126,12 +156,31 @@ class MarketDataRecord(StampedRecord):
     raw_open: float = Field(gt=0, allow_inf_nan=False)
     # 原始收盘价用于真实口径估值。
     raw_close: float = Field(gt=0, allow_inf_nan=False)
-    # 独立总回报价格用于因子，不能作为订单报价。
-    total_return_close: float = Field(gt=0, allow_inf_nan=False)
+    # 原双因子和总回报研究必须有此字段；MA价格策略不填造缺失的总回报。
+    total_return_close: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    # 仅拆股调整的收盘价用于MA价格趋势，不包含股息再投资。
+    split_adjusted_close: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     # 原始成交量用于流动性预算。
     volume: int = Field(ge=0)
     # 价格字段统一美元，成交量语义由字段定义固定为股。
     unit: Literal["USD"] = "USD"
+
+    @model_validator(mode="after")
+    def validate_price_version(self) -> Self:
+        """旧行情版本仍要求总回报；新价格口径必须使用1.1而非伪装成旧消息。"""
+        if self.schema_version == "1.0.0" and (
+            self.total_return_close is None or self.split_adjusted_close is not None
+        ):
+            raise ValueError("旧行情版本需要总回报且不支持拆股价格字段")
+        return self
+
+    @model_serializer(mode="wrap")
+    def serialize_price_version(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """序列化旧行情时不添加新空字段，保留既有输入封印的字节语义。"""
+        result: dict[str, Any] = handler(self)
+        if self.schema_version == "1.0.0":
+            result.pop("split_adjusted_close", None)
+        return result
 
 
 class Quote(Contract):
@@ -211,9 +260,12 @@ class FactorValue(Contract):
 class Score(Contract):
     """共同合格股票池的方向一致评分，不解释为预期收益。"""
 
+    # 1.1 明确允许未知行业；旧非空行业消息仍可读取。
+    schema_version: Literal["1.0.0", "1.1.0"] = "1.1.0"
+
     # 稳定身份也是最终并列排序键。
     security_id: str
-    sector: str
+    sector: str | None
     # 每因子百分位分数。
     components: dict[str, Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]]
     # 固定等权综合分。
@@ -248,22 +300,12 @@ class RegimeAssessment(Contract):
     affects_budget: Literal[False] = False
 
 
-class DemoConfig(Contract):
-    """仅适用于离线工程的显式参数；拒绝 live 模式，无真实账户授权含义。"""
+class StrategyConfig(Contract):
+    """组合与执行共用的风险参数；账户身份独立于离线或 Paper 装配模式。"""
 
-    # 不接受实盘或联网模拟模式。
-    mode: Literal["offline"] = "offline"
-    # 明确参数用途，禁止去掉演示标签后当作批准的风险预算。
-    demo_only: Literal[True] = True
-    account_id: Literal["DEMO"] = "DEMO"
-    # 固定种子只用于合成样本。
-    seed: int = 1729
-    start: date = date(2020, 9, 1)
-    end: date = date(2023, 12, 29)
-    # 合成普通股数量，市场基准另计。
-    securities: int = Field(default=30, ge=2, le=100)
-    # 初始模拟现金，单位美元。
-    initial_cash: Decimal = Field(default=Decimal("100000"), gt=0)
+    account_id: str
+    # 策略身份决定输入要求，不允许以改公式方式隐式替换原策略。
+    strategy: Literal["weekly-two-factor", "ma-trend"] = "weekly-two-factor"
     max_positions: int = Field(default=20, ge=1)
     # 每个入选证券的基础目标权重。
     target_weight: float = Field(default=0.045, gt=0, le=1)
@@ -291,6 +333,32 @@ class DemoConfig(Contract):
     quote_max_age_seconds: int = Field(default=60, ge=0)
     # 排名缓冲首版明确为零。
     ranking_buffer: Literal[0] = 0
+
+    @model_validator(mode="after")
+    def validate_weights(self) -> Self:
+        """禁止基础目标超过单票上限；资金不足不能通过重新归一化解决。"""
+        if self.target_weight > self.max_single:
+            raise ValueError("目标权重不得超过单票上限")
+        return self
+
+
+class DemoConfig(StrategyConfig):
+    """仅适用于离线工程的显式参数；拒绝 live 模式，无真实账户授权含义。"""
+
+    # 不接受实盘或联网模拟模式。
+    mode: Literal["offline"] = "offline"
+    # 明确参数用途，禁止去掉演示标签后当作批准的风险预算。
+    demo_only: Literal[True] = True
+    strategy: Literal["weekly-two-factor"] = "weekly-two-factor"
+    account_id: Literal["DEMO"] = "DEMO"
+    # 固定种子只用于合成样本。
+    seed: int = 1729
+    start: date = date(2020, 9, 1)
+    end: date = date(2023, 12, 29)
+    # 合成普通股数量，市场基准另计。
+    securities: int = Field(default=30, ge=2, le=100)
+    # 初始模拟现金，单位美元。
+    initial_cash: Decimal = Field(default=Decimal("100000"), gt=0)
     # 合成成交即结算不能迁移为真实账户制度。
     settlement: Literal["simulated_immediate_settlement"] = "simulated_immediate_settlement"
 
@@ -300,6 +368,42 @@ class DemoConfig(Contract):
         # 基础目标不能主动违反单票上限。
         if self.target_weight > self.max_single or self.start >= self.end:
             raise ValueError("目标权重不得超过单票上限，历史开始日必须早于结束日")
+        return self
+
+
+class PaperConfig(StrategyConfig):
+    """单次美股 Paper 运行边界；预算与远端余额分开，默认仅可读取。"""
+
+    mode: Literal["paper"] = "paper"
+    trading_endpoint: Literal["https://paper-api.alpaca.markets"] = (
+        "https://paper-api.alpaca.markets"
+    )
+    data_endpoint: Literal["https://data.alpaca.markets"] = "https://data.alpaca.markets"
+    candidates: list[str] = Field(min_length=2, max_length=30)
+    budget: Decimal = Field(gt=0)
+    history_start: date
+    history_end: date
+    history_feed: Literal["sip"] = "sip"
+    quote_feed: Literal["iex", "sip"] = "iex"
+
+    @model_validator(mode="after")
+    def validate_paper(self) -> Self:
+        """拒绝重复候选、无效账户及倒置日期；不在配置中保存凭据或写单授权。"""
+        for name, field in StrategyConfig.model_fields.items():
+            if (
+                name not in {"account_id", "schema_version", "strategy"}
+                and getattr(self, name) != field.default
+            ):
+                raise ValueError("本阶段 Paper 保持原策略风险参数；只允许指定账户、候选及预算")
+        if self.account_id == "DEMO" or not self.account_id.strip():
+            raise ValueError("Paper 必须指定真实模拟账户 ID")
+        if self.history_start >= self.history_end:
+            raise ValueError("历史起日必须早于结束日")
+        if len(set(self.candidates)) != len(self.candidates) or any(
+            not symbol or symbol != symbol.upper() or not symbol.replace(".", "").isalnum()
+            for symbol in self.candidates
+        ):
+            raise ValueError("候选必须是唯一的大写股票代码")
         return self
 
 
@@ -314,7 +418,8 @@ class AccountSnapshot(Contract):
     as_of: datetime
     # 现金事实不含未成交卖单预期收入。
     cash: Decimal = Field(ge=0)
-    # 适配器明确可用的现金；未结算现金不可擅自视为可用。
+    # 适配器明确的现金预算上限；Paper首次建仓另检查远端非保证金购买力，
+    # 此字段本身不证明现金已结算，也不能包含授信或尚未成交卖款。
     available_cash: Decimal = Field(ge=0)
     # 稳定证券 ID→实际整股数量，缺键按未持有处理；strict=True 避免把 True 当作一股。
     positions: dict[str, Annotated[int, Field(strict=True, ge=0)]] = Field(default_factory=dict)
@@ -335,8 +440,11 @@ class AccountSnapshot(Contract):
 class TargetPosition(Contract):
     """一个证券的约束后目标；不可交易旧仓必须保留并说明。"""
 
+    # 1.1 明确允许未知行业；旧非空行业消息仍可读取。
+    schema_version: Literal["1.0.0", "1.1.0"] = "1.1.0"
+
     security_id: str
-    sector: str
+    sector: str | None
     weight: float = Field(ge=0)
     # 按原始价格整股取整后的目标数量。
     quantity: int = Field(ge=0)
@@ -371,6 +479,45 @@ class RiskDecision(Contract):
     freeze_new_risk: bool = False
     # 可机器判断、可报告的原因代码。
     reasons: list[str] = Field(default_factory=list)
+
+
+class PaperQueueTestContext(Contract):
+    """休市排队撤单测试的来源与边界；不授权正常策略执行或实盘。
+
+    reference_close 为真实最后完整日线原始美元收盘价，reference_close_at 是实际
+    收盘时间，reference_observed_at 是资料采集时间。remote_clock_at 为最新券商
+    时钟事实；next_open 同时须经注入交易日历核对。此对象由应用保存到测试证据，
+    不能把旧收盘时间改成现在冒充实时行情；不修改原订单消息的序列化格式。
+    """
+
+    purpose: Literal["paper_queue_test"] = "paper_queue_test"
+    plan_id: str
+    decision_id: str
+    account_id: str
+    security_id: str
+    client_order_id: str
+    reference_session: date
+    reference_close: Decimal = Field(gt=0)
+    reference_close_at: datetime
+    reference_observed_at: datetime
+    remote_clock_at: datetime
+    remote_is_open: Literal[False]
+    next_open: datetime
+
+
+class QueuePreflightRejectionProof(Contract):
+    """旧版休市测试唯一提交前拒绝的审计凭据，不是券商拒单或通用强制终态。
+
+    应用须先核对旧运行失败文件、批准计划和源码，并保存独立审查证据。
+    evidence_hash 指向这些证据的内容指纹；执行服务另核对意图日志与远端事实。
+    固定源码和原因仅适用于已确认的旧版时钟边界缺陷，404本身不构成此证明。
+    """
+
+    plan_id: str
+    client_order_id: str
+    failed_source_hash: Literal["07be0b052412b809fb4acf317202d0cb0a41e0861744f629c77a30c205eef072"]
+    failure_reason: Literal["Paper 排队测试的单股、金额、身份或休市边界不符"]
+    evidence_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class OrderIntent(Contract):

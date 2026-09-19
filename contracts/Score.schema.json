@@ -12,14 +12,24 @@
       "type": "object"
     },
     "schema_version": {
-      "const": "1.0.0",
-      "default": "1.0.0",
+      "default": "1.1.0",
+      "enum": [
+        "1.0.0",
+        "1.1.0"
+      ],
       "title": "Schema Version",
       "type": "string"
     },
     "sector": {
-      "title": "Sector",
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Sector"
     },
     "security_id": {
       "title": "Security Id",

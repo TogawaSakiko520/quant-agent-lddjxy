@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>quant-core · Paper 观察窗口</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="#overview"><span class="brand-mark">q</span><span>quant-core<small>策略观察工作台</small></span></a>
+    <div class="nav-label">本次运行</div>
+    <nav aria-label="页面导航">
+      <a href="#overview"><span>◫</span>运行概览</a>
+      <a href="#market"><span>⌁</span>行情与候选</a>
+      <a href="#strategy"><span>◈</span>因子与目标</a>
+      <a href="#execution"><span>≡</span>订单与核对</a>
+    </nav>
+    <div class="sidebar-note"><span class="small-dot"></span>本地 · 只读展示<p>读取已保存的运行证据。刷新页面不会查询账户、下单或撤单。</p></div>
+    <div class="sidebar-footer">US EQUITIES<br><span id="strategy-name">WEEKLY TWO-FACTOR</span></div>
+  </aside>
+  <main id="overview">
+    <header class="page-header">
+      <div><div class="eyebrow">STRATEGY OBSERVATORY</div><h1>策略运行概览</h1><p id="subtitle">从数据到订单，查看每一步实际留下的证据。</p></div>
+      <div class="header-actions"><span class="badge mode-badge" id="mode-badge">等待数据</span><button id="refresh" type="button"><span aria-hidden="true">↻</span> 刷新展示</button></div>
+    </header>
+    <div id="connection-error" class="connection-error" role="alert" hidden></div>
+    <section class="run-banner" aria-labelledby="run-title">
+      <div class="run-symbol" aria-hidden="true">◌</div>
+      <div class="run-copy"><div class="eyebrow">当前进度</div><h2 id="run-title">正在读取本地运行证据</h2><p id="run-detail">只有保存的事实会显示在这里。</p></div>
+      <div class="run-time"><span>证据采集时间</span><strong id="as-of">—</strong><small id="account-id">账户未读取</small></div>
+    </section>
+    <section id="metrics" class="metrics" aria-label="账户与策略资金"></section>
+    <section class="panel pipeline-panel" aria-labelledby="pipeline-title">
+      <div class="section-heading"><div><span class="section-number">01 / PROCESS</span><h2 id="pipeline-title">闭环进度</h2></div><span class="muted">通过一个步骤 ≠ 完成策略闭环</span></div>
+      <ol id="pipeline" class="pipeline"><li class="placeholder">等待读取阶段记录</li></ol>
+    </section>
+    <section id="market" class="panel" aria-labelledby="market-title">
+      <div class="section-heading"><div><span class="section-number">02 / MARKET DATA</span><h2 id="market-title">行情与候选范围 <span class="count" id="source-count">—</span></h2></div><span class="muted">原始价格 · USD</span></div>
+      <p class="section-description">明确配置的当前候选范围，不代表历史全市场股票池。行情可读取不等于策略资料已合格。</p>
+      <div id="sources" class="table-scroll"></div>
+    </section>
+    <div id="strategy" class="strategy-grid">
+      <section class="panel" aria-labelledby="scores-title">
+        <div class="section-heading"><div><span class="section-number">03 / FACTORS & SCORES</span><h2 id="scores-title">因子与评分</h2></div><span class="badge quiet" id="strategy-badge">原策略 · 等权</span></div>
+        <p class="section-description" id="strategy-description">评分表示候选中的相对位置，不是收益预测。</p>
+        <div id="scores" class="table-scroll"></div><div id="exclusions" class="risk-notes"></div>
+      </section>
+      <section class="panel" aria-labelledby="targets-title">
+        <div class="section-heading"><div><span class="section-number">04 / PORTFOLIO</span><h2 id="targets-title">目标持仓</h2></div><span class="badge quiet">整股</span></div>
+        <p class="section-description">目标是策略希望达到的股数，不等于实际持仓或已成交股数。</p>
+        <div id="targets" class="table-scroll"></div>
+      </section>
+    </div>
+    <section id="execution" class="panel" aria-labelledby="orders-title">
+      <div class="section-heading"><div><span class="section-number">05 / EXECUTION</span><h2 id="orders-title">订单与成交状态 <span class="count" id="order-count">—</span></h2></div><span class="muted">提交成功不代表成交</span></div>
+      <div id="orders" class="table-scroll"></div>
+      <div id="risks" class="risk-notes"></div><div id="fills" class="table-scroll"></div>
+    </section>
+    <div class="bottom-grid">
+      <section class="panel reconciliation-panel" aria-labelledby="reconciliation-title">
+        <span class="section-number">06 / RECONCILIATION</span><h2 id="reconciliation-title">账户核对</h2>
+        <div id="reconciliation"></div>
+      </section>
+      <section class="panel limitations-panel" aria-labelledby="limitations-title">
+        <span class="section-number">CURRENT LIMITATIONS</span><h2 id="limitations-title">当前限制与待验证项</h2>
+        <ul id="limitations"><li>等待读取运行记录。</li></ul>
+      </section>
+    </div>
+    <footer class="page-footer"><span>quant-core / 本地运行证据</span><span>不连接交易服务 · 无写入操作 · 不自动执行策略</span></footer>
+  </main>
+</body>
+</html>

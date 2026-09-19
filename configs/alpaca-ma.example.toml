@@ -1,0 +1,11 @@
+mode = "paper"
+strategy = "ma-trend"
+account_id = "PAPER_ACCOUNT_ID"
+trading_endpoint = "https://paper-api.alpaca.markets"
+data_endpoint = "https://data.alpaca.markets"
+candidates = ["AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA", "JPM", "XOM", "JNJ", "PG"]
+budget = "10000"
+history_start = 2026-07-01
+history_end = 2026-09-18
+history_feed = "sip"
+quote_feed = "iex"

@@ -9,19 +9,24 @@ from quant_core.contracts import (
     Broker,
     Clock,
     ContractError,
-    DemoConfig,
     EventStore,
     FillEvent,
     OrderIntent,
+    OrderNotSent,
     OrderRecord,
+    PaperConfig,
+    PaperQueueTestContext,
+    QueuePreflightRejectionProof,
     Quote,
     ReconciliationResult,
     RiskBlocked,
     SecurityRecord,
+    StrategyConfig,
     TargetPortfolio,
     TradingCalendar,
+    canonical_hash,
 )
-from quant_core.risk import assess_operation, assess_order, assess_reduce
+from quant_core.risk import assess_operation, assess_order, assess_paper_queue_test, assess_reduce
 
 
 class ExecutionService:
@@ -38,7 +43,7 @@ class ExecutionService:
         store: EventStore,
         broker: Broker,
         clock: Clock,
-        config: DemoConfig,
+        config: StrategyConfig,
         calendar: TradingCalendar,
     ) -> None:
         """保存执行依赖；若内部库与券商公开同一路径，抛 ContractError 拒绝装配。"""
@@ -89,9 +94,12 @@ class ExecutionService:
                     confirmed = self.broker.query(local.intent.client_order_id)
                     if confirmed is not None:
                         remote_orders[local.intent.client_order_id] = confirmed
-            # 先导入可重复投递的真实状态和成交事件。
-            for event in self.broker.events():
-                # 查询得到的事实也必须已经发生，不能提前记入未来成交。
+            # 完整取得事件后重新读取处理时钟。网络查询期间可以产生合法成交，
+            # 不能用请求开始时刻将这些事实误标为未来事件并永久冻结账户。
+            remote_events = self.broker.events()
+            now = self.clock.now()
+            for event in remote_events:
+                # 查询响应之后仍未发生的事实才属于未来事件，不能提前入账。
                 if event.at > now:
                     self.store.freeze(f"FUTURE_BROKER_EVENT:{event.source}:{event.event_id}")
                     # 冻结原因已落库；只跳过此未来事件，继续核对其他事实，最终结果仍含冻结差异。
@@ -127,6 +135,8 @@ class ExecutionService:
             # 两者的 positions 以证券 ID 对应实际股数，cost_basis 对应持仓总成本美元；
             # 不比较各自查询时间，而是逐项核对现金、可用现金、费用、数量和成本。
             actual = self.broker.account()
+            # 账户查询也可能耗时；内部投影与最终核对结果使用读取完成后的处理时刻。
+            now = self.clock.now()
             expected = self.store.account(now)
             # 必须比较费用和成本，不能只比较净资产总额。
             for field in (
@@ -168,6 +178,73 @@ class ExecutionService:
         with self.store.account_lock():
             return self._recover()
 
+    def confirm_queue_not_sent(
+        self, client_order_id: str, *, proof: QueuePreflightRejectionProof
+    ) -> ReconciliationResult:
+        """依据固定旧版缺陷证据，将确定未发送的单一UNKNOWN意图追加为本地拒绝。
+
+        调用方必须先验证并保存proof所引用的审查材料；本方法不凭空构造证明。
+        持账户锁核验Paper/MA身份、唯一意图日志、无成交及仅该单待确认差异，
+        再次查询远端仍无订单才追加REJECTED。历史UNKNOWN保留，现金不调整、
+        账户不解冻，也不提交订单；最终返回再次独立核对结果供应用如实报告。
+        """
+        # model_copy可以绕过Pydantic验证，公开维护入口必须重新核对固定源码和原因。
+        try:
+            verified = QueuePreflightRejectionProof.model_validate(proof.model_dump())
+        except (AttributeError, ValueError) as exc:
+            raise ContractError("旧版未发送维护证据不合格") from exc
+        with self.store.account_lock():
+            local = self._find(client_order_id)
+            if (
+                not isinstance(self.config, PaperConfig)
+                or self.config.strategy != "ma-trend"
+                or local is None
+                or local.status != "UNKNOWN"
+                or local.broker_order_id is not None
+                or local.filled_quantity != 0
+                or local.intent.account_id != self.config.account_id
+                or local.intent.strategy_version != "ma-trend-1.0.0"
+                or local.intent.side != "BUY"
+                or local.intent.quantity != 1
+                or verified.client_order_id != client_order_id
+            ):
+                raise ContractError("旧版未发送维护仅允许指定Paper MA单股未知意图")
+            # queue键独立于普通策略键；计划指纹和稳定证券身份共同绑定这一张测试单。
+            expected_id = (
+                "queue-"
+                + canonical_hash({"plan": verified.plan_id, "security": local.intent.security_id})[
+                    :32
+                ]
+            )
+            if expected_id != client_order_id:
+                raise ContractError("旧版未发送证据与排队计划身份不符")
+            intents = [
+                entry.payload
+                for entry in self.store.journal()
+                if entry.operation == "intent"
+                and isinstance(entry.payload, OrderIntent)
+                and entry.payload.client_order_id == client_order_id
+            ]
+            if intents != [local.intent] or any(
+                isinstance(event, FillEvent) and event.client_order_id == client_order_id
+                for event in self.store.events()
+            ):
+                raise ContractError("旧版未发送维护要求唯一原意图且没有成交事实")
+            # 恢复可导入新到达的真实事实；任何额外差异或冻结都阻止维护，不能借此抹账。
+            before = self._recover()
+            if before.differences != [f"unconfirmed_order:{client_order_id}"]:
+                raise ContractError("旧版未发送维护存在其他差异或已确认远端订单")
+            if self._find(client_order_id) != local or any(
+                isinstance(event, FillEvent) and event.client_order_id == client_order_id
+                for event in self.store.events()
+            ):
+                raise ContractError("恢复发现订单身份或成交变化，不能维护为未发送")
+            if self.broker.query(client_order_id) is not None:
+                raise ContractError("旧版未发送维护查询到远端订单，必须正常恢复")
+            # 这是本地提交前拒绝，保留空broker ID；不伪造券商订单事件或新增成交。
+            self.store.record_order(OrderRecord(intent=local.intent, status="REJECTED"))
+            return self._recover()
+
     def _turnover(self, decision_id: str) -> Decimal:
         """按唯一实际成交计算本决策已用总换手美元额；买卖均取正，不用卖单限价估算。"""
         # decisions 把客户端订单 ID 映射到调仓决策 ID，用于从全部成交中筛出本轮已花换手。
@@ -197,6 +274,7 @@ class ExecutionService:
         *,
         reduce_only: bool = False,
         authorized: bool = True,
+        queue_context: PaperQueueTestContext | None = None,
         **risk_context: Any,
     ) -> OrderRecord:
         """在调用方已持有账户锁时，保存意图、恢复事实并检查本次提交权限。
@@ -250,17 +328,32 @@ class ExecutionService:
                 else max(recorded_turnover, provided_turnover)
             )
             # 风控明确接收本次恢复结论与全部未完成订单。
-            decision = assess_order(
-                intent,
-                self.store.account(self.clock.now()),
-                self.store.orders(),
-                quotes,
-                self.config,
-                self.clock.now(),
-                self.calendar,
-                reconciled=reconciliation.matched,
-                **risk_context,
-            )
+            # 明确的独立测试入口才提供context；两个评估入口共享同一财务规则实现。
+            if queue_context is None:
+                decision = assess_order(
+                    intent,
+                    self.store.account(self.clock.now()),
+                    self.store.orders(),
+                    quotes,
+                    self.config,
+                    self.clock.now(),
+                    self.calendar,
+                    reconciled=reconciliation.matched,
+                    **risk_context,
+                )
+            else:
+                decision = assess_paper_queue_test(
+                    intent,
+                    self.store.account(self.clock.now()),
+                    self.store.orders(),
+                    quotes,
+                    self.config,
+                    self.clock.now(),
+                    self.calendar,
+                    context=queue_context,
+                    reconciled=reconciliation.matched,
+                    **risk_context,
+                )
         # decision 是本次风控的允许结论与原因，不是券商回执。拒绝时只把本地意图置为
         # REJECTED 并抛异常；先前恢复成功写入的成交和账户不会因本次拒绝回滚。
         if not decision.allowed:
@@ -270,6 +363,10 @@ class ExecutionService:
         try:
             # 返回 OrderRecord 表示券商当时的订单状态；实际成交仍须经事件流入账。
             accepted = self.broker.submit(intent)
+        except OrderNotSent:
+            # 只有适配器明确证明尚未发出请求，才能消除发送歧义；普通契约错误仍传播。
+            self.store.record_order(OrderRecord(intent=intent, status="REJECTED"))
+            raise
         # 网络异常无法证明委托是否被受理。
         except (TimeoutError, ConnectionError):
             # UNKNOWN 表示可能已受理但无法确认；保存原客户端身份供恢复查询，不能换键再发。
@@ -296,8 +393,7 @@ class ExecutionService:
         """正常策略提交唯一入口；输入美元整股意图与原始报价，拒绝抛 RiskBlocked。
 
         target 保留原决策的批准目标；security_records 应由调用方准备为执行检查时已知、
-        有效的主表，当前买入资格由 assess_order 按注入时钟 now 核验。行业聚合仍存在
-        F01 未完整过滤主表版本的缺陷，不能把本入口视为完整时点保证。
+        有效的主表，当前买入资格由 assess_order 按注入时钟 now 核验。行业聚合由风控对所有风险占用证券按同一可用时点和有效区间核验。
         adv 是此前20个交易日平均成交股数，不因目标时点固定而允许使用未来成交量。
         reference_nav、peak_nav 和 turnover_used 均为美元，后者只可提高已用换手预算。
         None 不构成检查豁免：必要事实缺失仍由统一风控拒绝。
@@ -309,6 +405,41 @@ class ExecutionService:
             return self._submit(
                 intent,
                 quotes,
+                security_records=security_records,
+                adv=adv,
+                target=target,
+                reference_nav=reference_nav,
+                peak_nav=peak_nav,
+                turnover_used=turnover_used,
+                data_good=data_good,
+            )
+
+    def submit_paper_queue_test(
+        self,
+        intent: OrderIntent,
+        quotes: dict[str, Quote],
+        *,
+        context: PaperQueueTestContext,
+        security_records: list[SecurityRecord] | None = None,
+        adv: dict[str, float] | None = None,
+        target: TargetPortfolio | None = None,
+        reference_nav: Decimal | None = None,
+        peak_nav: Decimal | None = None,
+        turnover_used: Decimal | None = None,
+        data_good: bool = True,
+    ) -> OrderRecord:
+        """休市排队撤单测试入口；真实收盘参考不被冒充为实时执行报价。
+
+        context 必须绑定指定Paper账户、MA计划与单股意图，并由应用保存为证据。
+        本入口复用正常提交的账户锁、意图持久化、恢复、资金风控及唯一Broker调用；
+        仅独立核验休市排队资格。返回受理或未知状态后，应用必须查询并撤销本单，
+        不能把提交成功当作成交或把撤单请求当作撤单完成。
+        """
+        with self.store.account_lock():
+            return self._submit(
+                intent,
+                quotes,
+                queue_context=context,
                 security_records=security_records,
                 adv=adv,
                 target=target,

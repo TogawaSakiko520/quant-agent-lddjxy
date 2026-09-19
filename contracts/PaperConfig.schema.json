@@ -1,0 +1,216 @@
+{
+  "additionalProperties": false,
+  "description": "单次美股 Paper 运行边界；预算与远端余额分开，默认仅可读取。",
+  "properties": {
+    "account_id": {
+      "title": "Account Id",
+      "type": "string"
+    },
+    "budget": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Budget"
+    },
+    "candidates": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 30,
+      "minItems": 2,
+      "title": "Candidates",
+      "type": "array"
+    },
+    "daily_loss_limit": {
+      "default": 0.03,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Daily Loss Limit",
+      "type": "number"
+    },
+    "data_endpoint": {
+      "const": "https://data.alpaca.markets",
+      "default": "https://data.alpaca.markets",
+      "title": "Data Endpoint",
+      "type": "string"
+    },
+    "drawdown_limit": {
+      "default": 0.1,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Drawdown Limit",
+      "type": "number"
+    },
+    "fee_per_share": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "default": "0.005",
+      "title": "Fee Per Share"
+    },
+    "history_end": {
+      "format": "date",
+      "title": "History End",
+      "type": "string"
+    },
+    "history_feed": {
+      "const": "sip",
+      "default": "sip",
+      "title": "History Feed",
+      "type": "string"
+    },
+    "history_start": {
+      "format": "date",
+      "title": "History Start",
+      "type": "string"
+    },
+    "max_adv_fraction": {
+      "default": 0.01,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Max Adv Fraction",
+      "type": "number"
+    },
+    "max_gross": {
+      "default": 0.9,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Max Gross",
+      "type": "number"
+    },
+    "max_positions": {
+      "default": 20,
+      "minimum": 1,
+      "title": "Max Positions",
+      "type": "integer"
+    },
+    "max_sector": {
+      "default": 0.25,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Max Sector",
+      "type": "number"
+    },
+    "max_single": {
+      "default": 0.05,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Max Single",
+      "type": "number"
+    },
+    "max_turnover": {
+      "default": 1.0,
+      "exclusiveMinimum": 0,
+      "maximum": 2,
+      "title": "Max Turnover",
+      "type": "number"
+    },
+    "minimum_fee": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "default": "1",
+      "title": "Minimum Fee"
+    },
+    "mode": {
+      "const": "paper",
+      "default": "paper",
+      "title": "Mode",
+      "type": "string"
+    },
+    "price_buffer": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "default": "0.01",
+      "title": "Price Buffer"
+    },
+    "quote_feed": {
+      "default": "iex",
+      "enum": [
+        "iex",
+        "sip"
+      ],
+      "title": "Quote Feed",
+      "type": "string"
+    },
+    "quote_max_age_seconds": {
+      "default": 60,
+      "minimum": 0,
+      "title": "Quote Max Age Seconds",
+      "type": "integer"
+    },
+    "ranking_buffer": {
+      "const": 0,
+      "default": 0,
+      "title": "Ranking Buffer",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "pattern": "^1\\.0\\.0$",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "strategy": {
+      "default": "weekly-two-factor",
+      "enum": [
+        "weekly-two-factor",
+        "ma-trend"
+      ],
+      "title": "Strategy",
+      "type": "string"
+    },
+    "target_weight": {
+      "default": 0.045,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Target Weight",
+      "type": "number"
+    },
+    "trading_endpoint": {
+      "const": "https://paper-api.alpaca.markets",
+      "default": "https://paper-api.alpaca.markets",
+      "title": "Trading Endpoint",
+      "type": "string"
+    }
+  },
+  "required": [
+    "account_id",
+    "candidates",
+    "budget",
+    "history_start",
+    "history_end"
+  ],
+  "title": "PaperConfig",
+  "type": "object"
+}

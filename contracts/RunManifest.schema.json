@@ -81,6 +81,7 @@
         "schema_version": {
           "const": "1.0.0",
           "default": "1.0.0",
+          "pattern": "^1\\.0\\.0$",
           "title": "Schema Version",
           "type": "string"
         }
@@ -247,6 +248,7 @@
         "schema_version": {
           "const": "1.0.0",
           "default": "1.0.0",
+          "pattern": "^1\\.0\\.0$",
           "title": "Schema Version",
           "type": "string"
         },
@@ -272,6 +274,12 @@
           "default": "2020-09-01",
           "format": "date",
           "title": "Start",
+          "type": "string"
+        },
+        "strategy": {
+          "const": "weekly-two-factor",
+          "default": "weekly-two-factor",
+          "title": "Strategy",
           "type": "string"
         },
         "target_weight": {
@@ -353,6 +361,7 @@
     "schema_version": {
       "const": "1.0.0",
       "default": "1.0.0",
+      "pattern": "^1\\.0\\.0$",
       "title": "Schema Version",
       "type": "string"
     }

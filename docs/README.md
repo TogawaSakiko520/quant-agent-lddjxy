@@ -49,3 +49,11 @@
 | 注释规范如何演进及如何核验 | [分层解释迁移](audit/comment-semantics-migration.md)、[局部上下文增强](audit/local-context-readability.md)、[全仓可读性核验](audit/readability-compliance.md)。 |
 
 运行报告和数据库由程序写入本地 `artifacts/`，不随 Git 保存。生成与读取这些文件的方法集中在快速开始，仓库文档不依赖某次运行目录已经存在。
+
+## Alpaca Paper 接入
+
+[操作手册](runbooks/alpaca-paper.md)说明显式只读、补充资料、计划与受控执行；[本轮记录](audit/alpaca-paper.md)区分已实现、真实只读及未完成的策略闭环。
+
+MA最小Paper路径：[策略定义](strategies/ma-trend.md)、[本轮验证](audit/ma-paper.md)，展示启动同时支持uv与Conda，见根README。
+
+- [Paper休市提交撤单验收](audit/paper-queue.md)：真实远端订单身份、撤单与重启核对，和实际成交验收的区别。

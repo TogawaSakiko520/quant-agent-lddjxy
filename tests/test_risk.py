@@ -4,7 +4,9 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
+import pytest
 from test_data import security_record
+from test_portfolio import sector_boundary_case
 
 from quant_core.adapters.calendar import ExchangeCalendar
 from quant_core.contracts import (
@@ -17,6 +19,119 @@ from quant_core.contracts import (
     TargetPosition,
 )
 from quant_core.risk import assess_operation, assess_order, assess_reduce
+
+
+@pytest.mark.parametrize(
+    "problem",
+    ["none", "future_first", "future_last", "missing", "expired", "overlap", "quality", "conflict"],
+)
+def test_all_projected_sectors_use_current_unique_master(problem: str) -> None:
+    """F01手算反例必须拒绝；未来版本、缺失、过期与冲突均不能释放行业额度。"""
+    target, account, quotes, masters, at = sector_boundary_case()
+    intent = OrderIntent(
+        client_order_id="f01",
+        account_id="DEMO",
+        decision_id=target.decision_id,
+        security_id="B",
+        side="BUY",
+        quantity=20,
+        limit_price=Decimal("100"),
+        reserved_fee=Decimal("1"),
+        created_at=at,
+        eligible_at=at,
+    )
+    old = masters[0]
+    if problem.startswith("future"):
+        future = old.model_copy(
+            update={
+                "sector": "OTHER",
+                "effective_from": date(2024, 1, 1),
+                "available_at": datetime(2024, 1, 1, tzinfo=UTC),
+                "event_time": datetime(2024, 1, 1, tzinfo=UTC),
+            }
+        )
+        masters.insert(0 if problem == "future_first" else len(masters), future)
+    elif problem != "none":
+        masters.pop(0)
+        if problem == "expired":
+            masters.append(old.model_copy(update={"effective_to": at.date()}))
+        elif problem == "overlap":
+            masters.extend([old, old.model_copy(update={"effective_from": date(2021, 1, 1)})])
+        elif problem == "quality":
+            masters.append(old.model_copy(update={"quality": "quarantined"}))
+        elif problem == "conflict":
+            masters.extend([old, old.model_copy(update={"sector": "OTHER"})])
+    result = assess_order(
+        intent,
+        account,
+        [],
+        quotes,
+        DemoConfig(),
+        at,
+        ExchangeCalendar(date(2023, 1, 1), date(2023, 1, 31)),
+        target=target,
+        security_records=masters,
+        adv={"B": 1000000.0},
+        reference_nav=Decimal("100000"),
+        peak_nav=Decimal("100000"),
+    )
+    assert not result.allowed
+    # 六份4000旧仓加2000新单=26000 > (100000−1)×25%=24999.75。
+    if problem in {"none", "future_first", "future_last"}:
+        assert "sector_exposure_limit" in result.reasons
+    else:
+        assert "missing_sector_classification" in result.reasons
+
+
+def test_pending_buy_without_current_sector_cannot_be_hidden() -> None:
+    """尚无实际持仓的挂买单也须有当前行业；批准目标不能为它补造分类。"""
+    target, account, quotes, masters, at = sector_boundary_case()
+    positions = dict(account.positions)
+    positions.pop("A0")
+    account = account.model_copy(
+        update={
+            "cash": Decimal("80000"),
+            "available_cash": Decimal("80000"),
+            "positions": positions,
+        }
+    )
+    # 40股A0仍在挂单，未计入实际仓位；其他旧仓20000加挂买4000和本单2000仍为26000。
+    pending_intent = OrderIntent(
+        client_order_id="pending-a0",
+        account_id="DEMO",
+        decision_id=target.decision_id,
+        security_id="A0",
+        side="BUY",
+        quantity=40,
+        limit_price=Decimal("100"),
+        created_at=at,
+        eligible_at=at,
+    )
+    pending = OrderRecord(intent=pending_intent, status="OPEN", broker_order_id="external-a0")
+    intent = pending_intent.model_copy(
+        update={
+            "client_order_id": "new-b",
+            "security_id": "B",
+            "quantity": 20,
+            "reserved_fee": Decimal("1"),
+        }
+    )
+    result = assess_order(
+        intent,
+        account,
+        [pending],
+        quotes,
+        DemoConfig(),
+        at,
+        ExchangeCalendar(date(2023, 1, 1), date(2023, 1, 31)),
+        target=target,
+        security_records=masters[1:],
+        adv={"B": 1000000.0},
+        reference_nav=Decimal("100000"),
+        peak_nav=Decimal("100000"),
+    )
+    assert not result.allowed
+    assert "missing_sector_classification" in result.reasons
 
 
 def approved_target(intent: OrderIntent) -> TargetPortfolio:

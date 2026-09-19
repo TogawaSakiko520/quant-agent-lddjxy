@@ -1,0 +1,98 @@
+{
+  "additionalProperties": false,
+  "description": "休市排队撤单测试的来源与边界；不授权正常策略执行或实盘。\n\nreference_close 为真实最后完整日线原始美元收盘价，reference_close_at 是实际\n收盘时间，reference_observed_at 是资料采集时间。remote_clock_at 为最新券商\n时钟事实；next_open 同时须经注入交易日历核对。此对象由应用保存到测试证据，\n不能把旧收盘时间改成现在冒充实时行情；不修改原订单消息的序列化格式。",
+  "properties": {
+    "account_id": {
+      "title": "Account Id",
+      "type": "string"
+    },
+    "client_order_id": {
+      "title": "Client Order Id",
+      "type": "string"
+    },
+    "decision_id": {
+      "title": "Decision Id",
+      "type": "string"
+    },
+    "next_open": {
+      "format": "date-time",
+      "title": "Next Open",
+      "type": "string"
+    },
+    "plan_id": {
+      "title": "Plan Id",
+      "type": "string"
+    },
+    "purpose": {
+      "const": "paper_queue_test",
+      "default": "paper_queue_test",
+      "title": "Purpose",
+      "type": "string"
+    },
+    "reference_close": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Reference Close"
+    },
+    "reference_close_at": {
+      "format": "date-time",
+      "title": "Reference Close At",
+      "type": "string"
+    },
+    "reference_observed_at": {
+      "format": "date-time",
+      "title": "Reference Observed At",
+      "type": "string"
+    },
+    "reference_session": {
+      "format": "date",
+      "title": "Reference Session",
+      "type": "string"
+    },
+    "remote_clock_at": {
+      "format": "date-time",
+      "title": "Remote Clock At",
+      "type": "string"
+    },
+    "remote_is_open": {
+      "const": false,
+      "title": "Remote Is Open",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "pattern": "^1\\.0\\.0$",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "security_id": {
+      "title": "Security Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "plan_id",
+    "decision_id",
+    "account_id",
+    "security_id",
+    "client_order_id",
+    "reference_session",
+    "reference_close",
+    "reference_close_at",
+    "reference_observed_at",
+    "remote_clock_at",
+    "remote_is_open",
+    "next_open"
+  ],
+  "title": "PaperQueueTestContext",
+  "type": "object"
+}

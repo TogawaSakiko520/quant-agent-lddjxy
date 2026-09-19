@@ -77,8 +77,9 @@ def label_observations(
     """为冻结因子附加下一次开盘起、持有 horizon 个交易日的总回报标签。
 
     horizon 默认为 5；首个开盘必须严格晚于决策时间，终点包含第 horizon 日收盘。
-    标签行情可使用事后最终修订，不能把该价格索引传回特征或交易链。缺日、缺端点
-    或尚未到期的样本跳过；封印/版本冲突、重复因子或非正持有期抛 ContractError。
+    标签行情可使用事后最终修订，不能把该价格索引传回特征或交易链。缺日、缺端点、
+    任意窗口日缺总回报价或尚未到期的样本跳过；封印/版本冲突、重复因子或非正
+    持有期抛 ContractError。
     """
     if horizon < 1:
         raise ContractError("标签持有期必须为正")
@@ -145,7 +146,14 @@ def label_observations(
             entry is None
             or exit_record is None
             or any((security_id, session) not in prices for session in future[:horizon])
+            or any(
+                prices[(security_id, session)].total_return_close is None
+                for session in future[:horizon]
+            )
         ):
+            continue
+        # 端点及中间任一总回报价缺失均跳过，不用拆股价或原始价补研究标签。
+        if entry.total_return_close is None or exit_record.total_return_close is None:
             continue
         # 用同日原始开收比将总回报收盘口径转换成研究开盘基值。
         entry_research_price = entry.total_return_close * entry.raw_open / entry.raw_close

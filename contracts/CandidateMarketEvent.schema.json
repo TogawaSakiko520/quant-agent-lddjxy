@@ -84,9 +84,16 @@
       "type": "string"
     },
     "published_at": {
-      "format": "date-time",
-      "title": "Published At",
-      "type": "string"
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Published At"
     },
     "quality": {
       "enum": [
@@ -105,6 +112,7 @@
     "schema_version": {
       "const": "1.0.0",
       "default": "1.0.0",
+      "pattern": "^1\\.0\\.0$",
       "title": "Schema Version",
       "type": "string"
     },

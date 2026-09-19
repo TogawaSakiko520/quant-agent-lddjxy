@@ -66,7 +66,11 @@ def write_market_parquet(path: Path, records: list[MarketDataRecord]) -> None:
     """按共同契约字段独占创建历史 Parquet 文件；已有路径抛 FileExistsError。"""
     # model_dump(mode="json") 将模型转成可编码字段，Arrow 将每条记录组织为表中一行；
     # 写文件不替代输入质量/哈希校验。读取后仍需重建契约并经过历史时点闸门。
-    table = pa.Table.from_pylist([item.model_dump(mode="json") for item in records])
+    rows = [item.model_dump(mode="json") for item in records]
+    # 旧1.0消息省略新拆股字段；Arrow只按第一行推断会丢掉后续1.1价格。
+    # 显式取字段并集，旧行补空仅是列式存储表示；旧消息序列化仍去掉该空字段。
+    keys = sorted({key for row in rows for key in row})
+    table = pa.Table.from_pylist([{key: row.get(key) for key in keys} for row in rows])
     path.parent.mkdir(parents=True, exist_ok=True)
     # 独占创建避免覆盖已有批准数据。
     with path.open("xb") as stream:
