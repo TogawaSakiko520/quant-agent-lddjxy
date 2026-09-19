@@ -2,6 +2,35 @@
 
 本文件是交接事实源；聊天中的承诺和计划不等同于已实现能力。更新日期：2026-09-19。
 
+## 当前阶段：第一阶段文档整理完成（2026-09-19）
+
+本阶段只整理项目介绍、基本使用说明和文档维护入口。开工工作区干净，HEAD=`841966ab1bd823fd8c90f82298b42f3dbf6cad45`；修改前保存116文件快照、摘要和Git状态到 `artifacts/docs-phase1-20260919/baseline/`。源代码、源码注释、测试、配置、依赖锁、CI、检查器、Schema、项目元数据及旧审计文档保持起点字节，未开展其他开发任务。
+
+- 文档表达原则集中追加到 [docs/AGENTS.md](docs/AGENTS.md#文档表达原则)，没有新增writing-guide.md。根规则只增加读取引用，原源码注释与业务权限规则不变；提示词目录规则、索引及五份模板引用同一入口。
+- [README](README.md)按用途/阶段、能力限制、首次运行、报告、六命令、目录结构、开发检查、导航组织；[快速开始](docs/runbooks/quickstart.md)集中完整步骤、产物及退出码；新增[文档导航](docs/README.md)承接专题、维护和历史入口，不复制正文。
+- 代表性处理：保留已有锁定依赖命令和六个CLI；把抽象架构开头改为合成行情至报告的具体用途；详细公式、维护和审计入口移至分组导航；纠正未接Alpaca、一次周调仓演示、Linux/macOS本地验证、文件锁非加密及artifacts运行后才生成等表述。历史验证数字和过程不搬入首页。
+- 根规则、统一文档原则和首页由不同作者复核；快速开始与导航另经非作者以目标读者走读。发现的产物链接锚点和目录树缩进已修正，首次术语解释已补充，均已回看关闭。记录位于本阶段证据目录的 `principles-readme-review.md` 和 `reader-review.md`。
+
+### 本阶段实际验证
+
+沿用已有Python3.12.14环境及uv0.12.5，没有安装、升级或同步依赖。以下 `uv` 实际使用 `/private/tmp/quant-qc014-tools/bin/uv`，各运行命令带 `UV_NO_SYNC=1 UV_CACHE_DIR=/private/tmp/quant-qc014-uv-cache`，防止自动同步环境。README中的 `uv sync --locked` 是使用说明，本阶段未执行。
+
+| 实际命令/核验 | 结果 |
+|---|---|
+| `.venv/bin/python artifacts/docs-phase1-20260919/verify_docs.py` | 起始快照摘要及授权范围检查通过；根规则精确保持为仅追加文档原则引用，原docs规则保留；修改页相对链接、标题锚点及入站链接通过，六命令示例均由实际CLI解析器接受。旧状态记录中的生成产物链接单独列示，不冒充仓库内文件。证据见 `docs-verification.json`。 |
+| `uv run --offline --locked quant-core check --base 841966a` | 退出0，治理、Ruff、格式、mypy通过；**133 passed、20 warnings、52.80秒**。见 `check.log`。 |
+| `uv run --offline --locked quant-core demo --output artifacts/docs-phase1-20260919/demo` | 退出0，生成本阶段新报告和运行证据。见 `demo.log`。 |
+| `uv run --offline --locked quant-core validate --run-dir artifacts/docs-phase1-20260919/demo` | 退出0，不改原运行。见 `validate.log`。 |
+| `uv run --offline --locked quant-core replay --run-dir artifacts/docs-phase1-20260919/demo --output artifacts/docs-phase1-20260919/replay` | 退出0，账户、订单、因子、评分与目标五项比较均为true。见 `replay.log`。 |
+| `uv run --offline --locked quant-core report --run-dir artifacts/docs-phase1-20260919/demo` | 退出0；标准输出另存 `report.stdout.md`，用 `cmp` 与原演示报告比较，字节一致，未覆盖原报告。 |
+| `git diff --check` | 退出0。 |
+
+所有正式验证命令成功，20条既有第三方弃用警告及macOS沙箱中PyArrow读取CPU信息的权限诊断均保留，未通过改依赖或配置消除。未重新验证依赖安装、其他平台、远端CI、真实接口或持续运行；research独立CLI本阶段未执行，参数已核对，现有研究测试包含在完整检查中。安装命令未执行与命令失败分开记录。
+
+完整产物保存在新的 `artifacts/docs-phase1-20260919/`，不提交Git，也不覆盖旧证据。文档变更不改变业务源码指纹；新清单如实记录当前提交与dirty=true，环境前后依赖版本另存核对。本阶段结束，不自动继续环境迁移、接口接入、组件清理等任务，未提交、推送、发布或修改远端设置。
+
+以下保留此前阶段记录；其中“当前阶段”与验证结论均按各记录写入时的状态理解。
+
 ## 当前阶段：QC-014 全仓核验与局部补齐完成（2026-09-19）
 
 用户批准实施逐文件核验后的补齐计划，并确认可仅修正治理测试的一句错误说明。开工工作区干净，HEAD=`9f0835be08812b4233f548788a72d18a6fb1a5d9`，前两轮成果已经提交。编辑前保存115文件字节快照、摘要和Git状态到 `artifacts/readability-compliance-20260919/baseline/`，本轮比较基于该快照。

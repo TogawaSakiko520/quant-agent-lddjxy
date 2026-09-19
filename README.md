@@ -1,42 +1,97 @@
-# quant-core：可解释的离线美股多因子工程
+# quant-core：本地美股策略演示
 
-这是一个模块化单体：自有 Python 核心负责数据、因子、组合、风控和解释，适配器负责日历、快照、事件持久化及 FakeBroker（仅按注入事件运行的离线模拟券商）。首轮已完成演示、校验、回放、共同样本研究及双库备份/恢复验收；完整测试和运行证据见 [PROJECT_STATE.md](PROJECT_STATE.md)。合成样本和 FakeBroker 不证明收益，也不是已验收的生产回测引擎。
+quant-core 使用程序生成的合成行情，在本地演练选股、持仓规划、模拟订单、现金与持仓记账，以及中文报告生成。它用于理解和检查交易程序各步骤如何衔接，并保存输入与处理记录，便于核对结果。
 
-## 安装和无密钥运行
+当前阶段是离线工程验证。**尚未接入 Alpaca，也不需要券商账户或 API 密钥。** FakeBroker 是仓库内的本地模拟券商，不是 Alpaca 的外部模拟账户。
 
-当前验证环境为 Linux、Python 3.12 与 uv；账户文件锁依赖 POSIX 接口，其他平台未验证。首次安装依赖需要可用的包源；安装后固定样本演示不访问网络、不使用密钥。
+## 当前能力与关键限制
+
+- **选股与模拟交易流程**：按动量（过去一段时间的涨跌表现）和低波动（价格变化的平稳程度）两个选股指标（因子）评分，生成希望达到的持仓，检查风险限制，再模拟订单和成交，记录现金、费用与股数。
+- **一次演示**：`demo` 生成配置日期范围内的合成行情，只执行其中最后一次合格周调仓：每周最后一个交易日收盘后形成决策，模拟下一交易时段执行。同一次命令内完成，不等待真实市场开盘，也不是持续运行的服务。
+- **核对与重现**：将内部账本与本地模拟券商各自记录的账户、订单比较，这称为“对账”；根据保存的输入和事件重新构建结果，称为“回放”。
+- **因子研究**：统计选股指标与后续收益之间的样本关系。当前样本不是真实历史行情；研究统计和一次模拟成交都不能代替完整、扣除交易成本的策略回测，也不证明策略盈利。
+
+当前仍有已知问题：行业分类的历史版本可能影响风险判断；监控可能漏报目标之外的实际持仓；数量仅支持整股，不支持不足一股的碎股交易。具体发现与限制见[上线阻塞记录](docs/audit/launch-blockers.md)，最新实现与验证范围见[项目状态](PROJECT_STATE.md)。
+
+## 环境要求与首次运行
+
+需要 **Python 3.12**（项目要求 `>=3.12,<3.13`）和 **uv**。uv 用于按 `uv.lock` 安装依赖并运行命令；首次安装需要可用包源，可能联网。演示自身使用本地合成数据，不访问外部行情或券商。
+
+已有 Linux 和 macOS 的本地离线验证记录；这不代表所有平台、版本或持续运行环境均已支持。当前依赖 POSIX 类系统提供的文件锁接口，实际使用 `fcntl.flock` 协调**同机、同账户**的执行操作。这不是账户加密，也不能控制其他机器或券商端人工操作；其他平台未验证。
+
+以下命令均在**仓库根目录**运行：
 
 ```bash
 uv sync --locked
-uv run --offline --locked quant-core check
 uv run --offline --locked quant-core demo --output artifacts/demo
 ```
 
-当前工作区可直接查看 [正式解释报告](artifacts/demo/report.md) 和 [业务代码导读](docs/code_walkthrough/business-chain.md)；`artifacts/` 被 Git 忽略，新检出需先运行演示生成。
+`artifacts/demo` **必须尚不存在**。若已有同名目录，请换一个新名称，并让后续命令的 `--run-dir` 使用该名称；不要删除旧结果来重复运行。`--offline` 限制 uv 获取依赖时联网，不是操作系统级网络隔离；运行前仍需完成依赖安装。
 
-`check` 的最终检查范围、`demo` 的产物清单和回放命令由 [运行手册](docs/runbooks/quickstart.md) 说明；实际运行记录只写入 [PROJECT_STATE.md](PROJECT_STATE.md)。命令失败时先保留完整错误，再按 [故障与恢复手册](docs/runbooks/recovery.md) 处理，不得删测试或放松约束获得通过。
+默认演示使用30只合成股票、10万美元模拟现金，参数与 [configs/demo.toml](configs/demo.toml) 一致，仅用于演示。可用 `--config configs/demo.toml` 显式指定配置；完整步骤见[快速开始](docs/runbooks/quickstart.md)。
 
-## 业务链路
+## 运行结果
 
-固定原始样本 → 时点和质量检查 → 历史股票池 → 动量/低波动 → 同日百分位与等权评分 → 市场状态解释 → 目标组合 → 风控 → 持久化订单意图 → FakeBroker 事件 → 成交与现金账务 → 对账 → Markdown 解释报告。
+成功后，先用编辑器打开 **`artifacts/demo/report.md`**。这份演示报告按选股指标、评分、目标股数、实际股数、订单和账目组织结果。
 
-每次决策按 `available_at <= decision_time` 取历史版本。信号在周末合格交易日收盘后形成，执行必须等待下一合格交易时段。解释沿真实结构化记录生成，不调用 LLM。
+需要核对细节时，再看同目录的 `account.json`（现金、持仓和费用）、`orders.json`（委托及成交进度）和 `reconciliation.json`（两边记录是否一致及差异）。校验和回放命令检查保存的证据，完整文件清单见[快速开始的产物说明](docs/runbooks/quickstart.md#运行目录里有什么)。
 
-## 从哪里了解项目
+这些文件运行后才会生成，`artifacts/` 被 Git 忽略，新检出或 GitHub 页面中不保证存在。保留整个运行目录，不能只保存报告。
 
-| 问题 | 权威入口 |
+## 六个常用命令
+
+下表参数接在 `uv run --offline --locked quant-core` 后使用。`DIR`、`NEW_DIR` 和 `FILE` 表示需要替换的实际路径，`REV` 表示 Git 比较基线。
+
+| 子命令与参数 | 用途、主要输入输出 | 写入范围 |
+|---|---|---|
+| `demo --output NEW_DIR`；可选 `--config FILE` | 从配置生成合成数据，完成一次演示，输出报告和运行证据。 | 创建新运行目录及本地数据库。 |
+| `validate --run-dir DIR` | 校验已有运行的文件内容、记录与重算结果，输出校验状态。 | 不改原产物；创建并清理临时数据库。 |
+| `replay --run-dir DIR --output NEW_DIR` | 校验源运行后重建账户、订单及决策结果，输出一致性比较。 | 写新回放目录；不改源运行，不重新向券商提交订单。 |
+| `research --run-dir DIR` | 从已有运行追加因子研究，输出样本与分组统计。 | 在该运行目录的 `research/` 下新增实验；不改旧交易文件。 |
+| `report --run-dir DIR` | 校验后从已有记录重新生成报告文本，输出到终端。 | 不覆盖原报告；校验使用临时数据库。 |
+| `check`；可选 `--base REV` | 检查源码规范、类型、测试及文档引用，输出诊断。 | 可写缓存和测试临时文件，不自动修复源码。 |
+
+校验通过不等于收益或外部交易能力已验证；回放一致也不表示真实市场能再次以同价成交。
+
+## 仓库结构
+
+```text
+src/quant_core/          选股、组合、风险、订单、账务和应用入口
+  contracts.py          代码实际使用的数据模型与接口
+  adapters/             日历、文件/数据库及本地模拟券商
+configs/                演示参数
+contracts/              从代码模型导出的 Schema 和消息示例
+tests/                  业务、恢复、契约与治理测试
+tools/                  开发检查、契约导出与数据库备份工具
+docs/                   使用、设计、专题与审计文档
+prompts/                接手、实现、评审等维护模板
+.github/                CI 检查定义，不代表远端已经运行通过
+artifacts/              运行生成的结果；不提交 Git
+pyproject.toml          Python要求、依赖声明及命令入口
+uv.lock                 锁定的依赖版本
+```
+
+“数据契约”指模块间约定的数据格式与接口；`src/quant_core/contracts.py` 是实际定义，根 `contracts/` 保存生成的 Schema（字段与约束描述）及示例，两者不应各自维护一套字段。详细说明见[共同数据契约](docs/contracts.md)。
+
+## 开发检查
+
+修改代码后，在源码仓库及已安装开发依赖的环境中运行统一检查：
+
+```bash
+uv run --offline --locked quant-core check
+```
+
+它汇总治理检查、Ruff格式与规则检查、mypy类型检查和pytest测试。进行差异复核时，可使用 `check --base REV` 指定实际基线；不指定时不会完成敏感差异审计。
+
+首次体验与开发验收是不同步骤。开发完成后仍需按现有要求执行检查、在新目录演示与回放，并记录真实结果。参见[维护流程](docs/runbooks/ai-maintenance.md)和[根规则](AGENTS.md)，文档修改遵循[统一表达原则](docs/AGENTS.md#文档表达原则)。
+
+## 文档导航
+
+| 阅读目的 | 首选入口 |
 |---|---|
-| 需求和验收是什么 | [SPEC.md](SPEC.md)、[需求映射](docs/requirements.json) |
-| 模块为何这样分工 | [ARCHITECTURE.md](ARCHITECTURE.md)、[架构决策](docs/adr/0001-offline-engine.md) |
-| 哪些是假设或阻塞 | [ASSUMPTIONS.md](ASSUMPTIONS.md) |
-| 实际做完并验证了什么 | [PROJECT_STATE.md](PROJECT_STATE.md)、[CHANGELOG.md](CHANGELOG.md) |
-| 策略怎样形成信号与目标 | [周频双因子策略](docs/strategies/weekly-two-factor.md) |
-| 因子公式如何手算 | [动量](docs/factors/momentum.md)、[低波动](docs/factors/low-volatility.md) |
-| 如何读源码和共同契约 | [业务代码导读](docs/code_walkthrough/business-chain.md)、[数据契约](docs/contracts.md) |
-| 人和 AI 如何维护 | [AGENTS.md](AGENTS.md)、[维护流程](docs/runbooks/ai-maintenance.md)、[提示词](prompts/README.md) |
-| 研究怎样隔离未来信息 | [研究与验证](docs/research.md) |
-| 市场状态是什么意思 | [观察器规则](docs/regime.md) |
-| 参数是什么意思 | [演示配置](docs/configuration.md) |
-| 如何运行、扩展与恢复 | [快速开始](docs/runbooks/quickstart.md)、[扩展](docs/runbooks/extensions.md)、[恢复](docs/runbooks/recovery.md)、[备份/迁移](docs/runbooks/backups-migrations.md) |
+| 运行项目 | [快速开始](docs/runbooks/quickstart.md)、[配置说明](docs/configuration.md) |
+| 理解代码 | [业务代码导读](docs/code_walkthrough/business-chain.md)、[架构与职责](ARCHITECTURE.md) |
+| 参与开发 | [维护流程](docs/runbooks/ai-maintenance.md)、[维护提示词](prompts/README.md) |
+| 查看状态 | [项目状态](PROJECT_STATE.md)、[变更记录](CHANGELOG.md) |
 
-`market-intel` 是后续独立项目；本仓库只定义经版本化契约传入候选信息的边界。它不能调用本项目交易入口、写入已批准因子或覆盖历史快照。
+完整的专题、需求、恢复和历史审计入口见[文档导航](docs/README.md)。
