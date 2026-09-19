@@ -4,19 +4,57 @@
 
 ## 运行前提
 
-准备好仓库源码、Python 3.12 和 `uv`。下面所有命令都在**仓库根目录**执行，也就是包含 `pyproject.toml` 和 `uv.lock` 的目录。
+准备好仓库源码和 Python 3.12；uv 的检查与安装见下一节。下面项目命令都在**仓库根目录**执行，也就是包含 `pyproject.toml` 和 `uv.lock` 的目录。
 
-Linux 和 macOS 上已有本地离线流程验证，但尚未完成全部平台的兼容性验收。当前账户锁使用 `fcntl.flock` 文件锁，协调同一台机器上、同一账户且遵守该锁机制的程序，避免同时执行；它不加密账户，也不能协调另一台机器或控制券商端人工操作。
+macOS 是主要本地开发环境，具体系统、架构、解释器和验证边界见 [macOS 验证记录](../audit/macos-development.md)。Linux CI 定义继续保留；本轮没有重新执行 Linux 或远端 CI。当前账户锁使用 `fcntl.flock` 文件锁，协调同一台机器上、同一账户且遵守该锁机制的程序，避免同时执行；它不加密账户，也不能协调另一台机器或控制券商端人工操作。
 
 本例使用 `artifacts/demo` 和 `artifacts/replay` 作为输出目录，二者必须尚不存在。如果已经有同名目录，分别换成新的名称，例如 `artifacts/demo-02`、`artifacts/replay-02`，并在后面的命令和报告路径中保持一致。保留旧目录，不覆盖原运行记录。
 
-## 1. 安装锁定的依赖
+## 1. 确认 uv 并安装锁定的依赖
+
+先运行 `command -v uv` 和 `uv --version`。若命令不可用，先检查 `~/.local/bin/uv` 等已有安装位置；只是没有加入 PATH 时，不需要重复安装。PATH 是终端查找命令的目录列表。
+
+确实没有安装时，可按官方指定版本方式安装 **uv 0.12.5**，与仓库 CI 使用的版本一致。以下步骤会联网，只适用于 `~/.local/bin/uv` 和 `~/.local/bin/uvx` 均不存在（也没有同名符号链接）的情况；已有其他版本不自动覆盖或升级。
 
 ```bash
-uv sync --locked
+uv_installer=$(mktemp)
+curl -LsSf https://astral.sh/uv/0.12.5/install.sh -o "$uv_installer" &&
+  env UV_NO_MODIFY_PATH=1 UV_INSTALL_DIR="$HOME/.local/bin" sh "$uv_installer"
 ```
 
-首次安装可能需要从包源下载依赖。安装完成后，下文命令使用 `--offline --locked`，按现有锁文件在本地环境运行；它不会在运行时下载缺失的依赖。
+安装器写入用户目录，不需要 sudo，也不安装系统 Python。`UV_NO_MODIFY_PATH=1` 禁止它修改 shell 启动配置，详见 [uv 官方安装选项](https://docs.astral.sh/uv/reference/installer/)。安装失败时保留输出，不继续假定 uv 已可用。
+
+使用上述用户目录安装时，在**当前终端**启用并核对：
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+command -v uv
+uv --version
+```
+
+这不会写入 `.zshrc` 等配置文件；新开终端后需要重新设置，或直接使用 `~/.local/bin/uv` 代替下文的 `uv`。不要将 `source ~/.local/bin/env` 作为必需步骤：本安装方式没有要求生成该脚本。
+
+经常在macOS的zsh终端开发时，也可以把下面这一段加入自己的 `~/.zshrc`，让之后的新交互式终端自动找到uv。先检查已有内容，只添加一次，不覆盖其他配置；判断条件避免重复添加目录。这是用户主动配置PATH的步骤，与安装器自动修改shell配置分开。
+
+```bash
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+```
+
+保存后新开终端，或在已有终端执行 `source ~/.zshrc`，再运行 `command -v uv` 与 `uv --version` 确认。无需sudo；不会修改系统Python或项目依赖，但该目录中的命令会进入终端的查找范围。
+
+确认已有 Python 3.12 后安装项目依赖，并禁止 uv 在缺少解释器时自动下载另一套 Python：
+
+```bash
+uv sync --locked --no-python-downloads
+uv run --offline --locked python --version
+uv sync --offline --locked --check
+```
+
+首次安装可能需要从包源下载依赖。若已有 Python 3.12 未被找到，可在同步命令追加 `--python /实际路径/python3.12`，不要修改系统 Python。核对版本应为 3.12.x，最后一条命令只检查环境是否与项目同步；未通过时先处理原因。安装完成后，下文命令使用 `--offline --locked`，按现有锁文件在本地环境运行；它不会在运行时下载缺失的依赖。
+
+日常仍由 uv 管理本仓库的 `.venv`。根 [requirements.txt](../../requirements.txt) 是锁文件导出的运行与开发依赖清单，不包含本项目自身安装，也不是 conda 环境文件。导出和更新方法集中在[维护流程](ai-maintenance.md#依赖声明锁文件与导出清单)；conda 兼容尚未验证。
 
 ## 2. 运行一次演示
 

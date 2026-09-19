@@ -15,18 +15,20 @@ quant-core 使用程序生成的合成行情，在本地演练选股、持仓规
 
 ## 环境要求与首次运行
 
-需要 **Python 3.12**（项目要求 `>=3.12,<3.13`）和 **uv**。uv 用于按 `uv.lock` 安装依赖并运行命令；首次安装需要可用包源，可能联网。演示自身使用本地合成数据，不访问外部行情或券商。
+需要 **Python 3.12**（项目要求 `>=3.12,<3.13`）和 **uv**，当前验证使用 uv 0.12.5。uv 用于按 `uv.lock` 安装依赖并运行命令；首次安装需要可用包源，可能联网。没有 uv 或终端找不到命令时，先按[快速开始](docs/runbooks/quickstart.md#1-确认-uv-并安装锁定的依赖)检查并安装；该方式不修改全局 shell 配置。演示自身使用本地合成数据，不访问外部行情或券商。
 
-已有 Linux 和 macOS 的本地离线验证记录；这不代表所有平台、版本或持续运行环境均已支持。当前依赖 POSIX 类系统提供的文件锁接口，实际使用 `fcntl.flock` 协调**同机、同账户**的执行操作。这不是账户加密，也不能控制其他机器或券商端人工操作；其他平台未验证。
+**macOS 是本仓库的主要本地开发环境。** 已在 macOS 26.5.1、Apple Silicon、Python 3.12.14 上完成独立虚拟环境重建与离线开发验收；具体证据和解释器来源见 [macOS 验证记录](docs/audit/macos-development.md)。Linux 的已有记录和 CI 定义继续保留，本轮未重新验证 Linux 或远端 CI；其他 macOS 版本、Intel Mac 和持续交易环境不在本次结论内。
+
+当前依赖 POSIX 类系统提供的文件锁接口，实际使用 `fcntl.flock` 协调**同机、同账户**的执行操作。这不是账户加密，也不能控制其他机器或券商端人工操作。
 
 以下命令均在**仓库根目录**运行：
 
 ```bash
-uv sync --locked
+uv sync --locked --no-python-downloads
 uv run --offline --locked quant-core demo --output artifacts/demo
 ```
 
-`artifacts/demo` **必须尚不存在**。若已有同名目录，请换一个新名称，并让后续命令的 `--run-dir` 使用该名称；不要删除旧结果来重复运行。`--offline` 限制 uv 获取依赖时联网，不是操作系统级网络隔离；运行前仍需完成依赖安装。
+同步前须已有可用的 Python 3.12；`--no-python-downloads` 避免自动下载解释器，未找到时按快速开始指定已有解释器路径。`artifacts/demo` **必须尚不存在**。若已有同名目录，请换一个新名称，并让后续命令的 `--run-dir` 使用该名称；不要删除旧结果来重复运行。`--offline` 限制 uv 获取依赖时联网，不是操作系统级网络隔离；运行前仍需完成依赖安装。
 
 默认演示使用30只合成股票、10万美元模拟现金，参数与 [configs/demo.toml](configs/demo.toml) 一致，仅用于演示。可用 `--config configs/demo.toml` 显式指定配置；完整步骤见[快速开始](docs/runbooks/quickstart.md)。
 
@@ -69,6 +71,7 @@ prompts/                接手、实现、评审等维护模板
 artifacts/              运行生成的结果；不提交 Git
 pyproject.toml          Python要求、依赖声明及命令入口
 uv.lock                 锁定的依赖版本
+requirements.txt        从锁文件导出的运行与开发依赖，不手工维护
 ```
 
 “数据契约”指模块间约定的数据格式与接口；`src/quant_core/contracts.py` 是实际定义，根 `contracts/` 保存生成的 Schema（字段与约束描述）及示例，两者不应各自维护一套字段。详细说明见[共同数据契约](docs/contracts.md)。
@@ -84,6 +87,8 @@ uv run --offline --locked quant-core check
 它汇总治理检查、Ruff格式与规则检查、mypy类型检查和pytest测试。进行差异复核时，可使用 `check --base REV` 指定实际基线；不指定时不会完成敏感差异审计。
 
 首次体验与开发验收是不同步骤。开发完成后仍需按现有要求执行检查、在新目录演示与回放，并记录真实结果。参见[维护流程](docs/runbooks/ai-maintenance.md)和[根规则](AGENTS.md)，文档修改遵循[统一表达原则](docs/AGENTS.md#文档表达原则)。
+
+`requirements.txt` 为后续环境兼容保留精确依赖清单，uv 仍是主要工作流。它不包含本项目自身安装，不是 conda 环境文件；conda 兼容尚未验证。生成方法见[依赖维护说明](docs/runbooks/ai-maintenance.md#依赖声明锁文件与导出清单)。
 
 ## 文档导航
 

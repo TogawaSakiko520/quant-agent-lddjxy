@@ -10,6 +10,20 @@
 6. 独立复核公式、时点、订单/账务与风险、中文说明语义和文档同步。自检不能冒称独立复核；AI 复核也不能代替实际的发布授权。
 7. 更新 PROJECT_STATE 与 CHANGELOG。只有在授权策略、账户和风险边界及发布流程均满足时，人工审批相应发布；普通已批准策略无需逐笔确认。
 
+## 依赖声明、锁文件与导出清单
+
+日常开发沿用 uv：`pyproject.toml` 声明允许的依赖范围，`uv.lock` 锁定解析结果，根 `requirements.txt` 是后者导出的运行与开发依赖清单。不要手工修改导出文件形成第二套版本。需要新增或升级依赖时仍遵循原有授权、测试和复核要求；导出清单本身不授权改锁。
+
+在仓库根目录使用当前验证的 uv 0.12.5 生成：
+
+```bash
+uv export --locked --offline --format requirements-txt --group dev --no-emit-project --output-file requirements.txt
+```
+
+保留精确版本、平台条件和包哈希；`--no-emit-project` 排除本项目自身，因而仅安装此文件不会注册 `quant-core` 命令。Python 3.12 的要求仍以项目元数据为准。清单可供后续在 conda 环境中通过 pip 安装依赖时使用，但它不包含 conda 的 Python、渠道或系统库配置，当前也未验证 conda 工作流。
+
+获授权更新锁文件后，应重新导出并复核差异；检查重复导出的内容相同，且单纯导出没有修改锁文件。此项是维护复核步骤，本轮没有增加检查器或 CI 规则。macOS 工具安装见[快速开始](quickstart.md)，已测环境与限制见[平台验证记录](../audit/macos-development.md)。
+
 ## 自动检查与边界
 
 `quant-core check` 执行的实际子项以 CLI 和 PROJECT_STATE 的运行记录为准。治理工具检查 src/tests/tools 中全部自有 Python 的模块/类/函数真正中文 docstring、函数类型、核心依赖和需求引用。普通字符串不能替代 docstring；不要求普通语句或 else/except/finally 紧邻中文说明，不按注释比例、固定行数、段落标签或关键词计数打分。排除名单保持为空。

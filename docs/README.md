@@ -40,6 +40,7 @@
 | 想确认什么 | 阅读入口 |
 |---|---|
 | 当前完成了什么、哪些命令实际验证过 | [项目状态](../PROJECT_STATE.md)。历史记录按当时的代码和环境解释。 |
+| macOS 能否用于本地开发，具体测过哪些环境与命令 | [macOS 开发环境核验](audit/macos-development.md)。 |
 | 仓库有哪些变更 | [变更日志](../CHANGELOG.md)。 |
 | 有哪些未解决假设或外部条件 | [假设与阻塞](../ASSUMPTIONS.md)。 |
 | 接入外部模拟交易前还缺什么 | [上线阻塞清单](audit/launch-blockers.md)、[准备审计](audit/readiness.md)。 |
