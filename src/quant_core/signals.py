@@ -1,6 +1,5 @@
 """横截面百分位与固定等权评分；排名不是收益预测，不访问订单或券商。"""
 
-# 排名只用确定的排序与共享契约。
 from quant_core.contracts import (
     ContractError,
     DataSnapshot,
@@ -9,21 +8,23 @@ from quant_core.contracts import (
     SignalSet,
     canonical_hash,
 )
-
-# 因子稳定定义决定共同评分要求。
 from quant_core.factors import DEFINITIONS
-
-# 资格规则只有一个实现。
 from quant_core.universe import qualified_universe
 
 
 def score_factors(snapshot: DataSnapshot, factors: list[FactorValue]) -> SignalSet:
-    """在共同有效样本排名，平均并列名次；返回排序信号，输入冲突抛错，无副作用。"""
-    # 合格主表用于行业映射与确定候选。
+    """把同一快照的双因子原值转换为固定等权评分。
+
+    任一因子缺失的证券退出两个因子的共同样本，少于两只时返回空评分及原因。
+    百分位采用精确并列的平均名次；结果按综合分降序、稳定证券 ID 升序排列。
+    快照/时点不符、未知因子版本或重复证券因子键抛 ContractError。
+    """
+    # universe 用稳定证券 ID 索引合格主表，既决定评分资格，也向输出 Score 提供行业。
     universe = {security.security_id: security for security in qualified_universe(snapshot)}
     # 因子 ID 顺序固定，不允许外来因子改变权重。
     required = [definition.factor_id for definition in DEFINITIONS]
-    # 记录每只证券的完整有效因子。
+    # values 的形状是 {证券 ID: {因子 ID: 原始因子值}}；数值仍是动量/低波动原值，
+    # 尚未成为 [0,1] 百分位。输入空值或带排除原因的结果不会写入这个表。
     values: dict[str, dict[str, float]] = {}
     # 不合格证券也要在解释中可见。
     excluded = {
@@ -40,72 +41,56 @@ def score_factors(snapshot: DataSnapshot, factors: list[FactorValue]) -> SignalS
             factor.snapshot_id != snapshot.snapshot_id
             or factor.decision_time != snapshot.decision_time
         ):
-            # 拒绝交叉批次混入而非静默重贴标签。
             raise ContractError("因子快照或时点不一致")
-        # 本策略只认识固定的两个版本化因子。
         if factor.factor_id not in required or factor.factor_version != "1.0.0":
-            # 未批准因子不能改变评分定义。
             raise ContractError("未知因子或版本")
-        # 唯一键由稳定证券和因子组成。
         key = (factor.security_id, factor.factor_id)
-        # 同键重复属于边界错误。
         if key in seen:
-            # 避免列表覆盖掩盖来源冲突。
             raise ContractError("重复因子结果")
-        # 标记该键已消费。
         seen.add(key)
-        # 仅接受资格内有效值。
         if factor.security_id in universe and factor.value is not None and factor.reason is None:
-            # 收集后统一做共同样本排名。
+            # 首个有效因子为该证券建立内层字典，后续因子加入同一字典；不是覆盖整只证券。
             values.setdefault(factor.security_id, {})[factor.factor_id] = factor.value
-        # 无效因子解释仍需留存。
         elif factor.security_id in universe:
             # 不补零或沿用上一期因子。
             excluded[factor.security_id] = factor.reason or "missing_factor"
-    # 共同样本确保不同股票得分可比较。
+    # eligible 是两个因子都有效的证券 ID 列表，两次排名都使用它以保持样本可比。
+    # get 的空字典表示该证券没有有效因子；先按 ID 排序让后续遍历顺序可复现。
     eligible = sorted(
         security_id for security_id in universe if len(values.get(security_id, {})) == len(required)
     )
     # 无输入因子的证券也记入缺失。
     for security_id in universe:
-        # 缺任何因子就退出两个因子的排名样本。
         if security_id not in eligible:
-            # 保留更详细的现有原因。
+            # 只给尚无原因的证券补通用缺失原因，不覆盖上面保留的具体失败原因。
             excluded.setdefault(security_id, "missing_factor")
     # 一个样本无法提供横截面对比。
     if len(eligible) < 2:
-        # 记录样本不足而非给予虚假的满分。
         excluded.update({security_id: "insufficient_cross_section" for security_id in eligible})
-        # 返回空信号供组合保留现金。
         eligible = []
-    # 每个证券保存两个百分位。
+    # components 与 values 键结构相同，但内层存的是每个因子的 [0,1] 百分位；
+    # 只为 eligible 建表，之后直接成为 Score.components，并用于计算等权综合分。
     components: dict[str, dict[str, float]] = {security_id: {} for security_id in eligible}
-    # 按固定公式分别排序。
     for factor_id in required:
         # 值升序使越大对应越高百分位，稳定 ID 仅固定排序。
         ordered = sorted(
             eligible, key=lambda security_id: (values[security_id][factor_id], security_id)
         )
-        # 逐组处理完全相同的值。
         index = 0
         # 不对近似浮点值擅自定义新的并列容差。
         while index < len(ordered):
-            # 找到当前并列组的右开边界。
+            # index/end 是 ordered 中同值证券组的左闭右开下标，[index:end] 正好取整组。
             end = index + 1
-            # 精确并列采用平均名次。
             while (
                 end < len(ordered)
                 and values[ordered[end]][factor_id] == values[ordered[index]][factor_id]
             ):
-                # 继续扩展当前并列组。
                 end += 1
-            # 零基平均名次除以 N-1，最低0最高1。
+            # 零基平均名次除以 N-1，范围为[0,1]；并列端点未必取0/1，全并列时均为0.5。
             percentile = (index + end - 1) / 2 / (len(ordered) - 1)
-            # 给每个并列证券相同分数。
             for security_id in ordered[index:end]:
-                # 最终并列才由证券 ID 决定入选顺序。
                 components[security_id][factor_id] = percentile
-            # 继续下一组。
+            # 从组的右边界继续，既不重复计分，也不跳过下一组首个证券。
             index = end
     # 两因子严格等权，不估计优化权重。
     scores = [
@@ -117,13 +102,12 @@ def score_factors(snapshot: DataSnapshot, factors: list[FactorValue]) -> SignalS
         )
         for security_id in eligible
     ]
-    # 排序在所有运行中确定。
+    # 负综合分使高分排在前；同分按稳定 ID 排序，为组合挑选目标提供确定优先级。
     scores.sort(key=lambda score: (-score.value, score.security_id))
     # 决策身份依赖固定输入和固定策略版本，不依赖运行UUID。
     decision_id = canonical_hash(
         {"snapshot_id": snapshot.snapshot_id, "strategy": "weekly-two-factor-1.0.0"}
     )
-    # 策略只返回信号，不生成外部操作。
     return SignalSet(
         decision_id=decision_id,
         decision_time=snapshot.decision_time,

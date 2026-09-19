@@ -1,9 +1,7 @@
 """从结构化事实生成中文解释报告；不调用 LLM、不编造买卖原因、不改写交易事实。"""
 
-# 固定JSON键顺序保证字典经磁盘读回后报告文本仍完全一致。
 import json
 
-# 报表只读取权威业务对象。
 from quant_core.contracts import (
     AccountSnapshot,
     DataSnapshot,
@@ -14,8 +12,6 @@ from quant_core.contracts import (
     SignalSet,
     TargetPortfolio,
 )
-
-# 告警来自独立监控检查。
 from quant_core.monitoring import Alert
 
 
@@ -30,10 +26,9 @@ def render_report(
     reconciliation: ReconciliationResult,
     alerts: list[Alert],
 ) -> str:
-    """返回 Markdown 解释文本；输入金额美元、数量股，缺失因子明确显示，无副作用。"""
+    """把同次运行的输入、评分、目标、订单和账户事实排成 Markdown；金额美元、数量股。"""
     # 字典展示必须显式排序，不能依赖内存构造或JSON读回的插入顺序。
     regime_evidence = json.dumps(regime.evidence, ensure_ascii=False, sort_keys=True)
-    # 排除原因同样按稳定身份顺序展示。
     exclusions = json.dumps(signals.excluded, ensure_ascii=False, sort_keys=True)
     # 固定报告头部说明工程证据的适用边界。
     lines = [
@@ -53,15 +48,13 @@ def render_report(
         "| 证券 | 动量原值 | 低波动原值 | 动量百分位 | 低波动百分位 | 综合分 |",
         "|---|---:|---:|---:|---:|---:|",
     ]
-    # 建立只读因子索引，避免从评分反推原始数值。
+    # 本函数的 values 是 (证券 ID, 因子 ID)→原始因子值，仅用于展示，不重新算因子。
+    # get 缺键保持 None，与缺失数值一样明确展示；不能从百分位反推原值或把缺失填零。
     values = {(item.security_id, item.factor_id): item.value for item in factors}
-    # 依照真实信号顺序展示全部合格证券。
     for score in signals.scores:
-        # 从契约内的因子身份读取实际计算结果。
         momentum = values.get((score.security_id, "momentum"))
         # 低波动缺失不得替换成零。
         low_vol = values.get((score.security_id, "low_volatility"))
-        # 百分位来自实际标准化结果。
         lines.append(
             f"| {score.security_id} | {momentum} | {low_vol} | {score.components.get('momentum')} | {score.components.get('low_volatility')} | {score.value:.6f} |"
         )
@@ -77,9 +70,9 @@ def render_report(
             "|---|---|---:|---:|---:|---|",
         ]
     )
-    # 每个目标绑定真实约束原因，未成交目标不冒充已实现仓位。
+    # 左侧数量来自目标，右侧通过 account.positions 查实际股数（缺键为零），并排
+    # 展示计划与事实。这里只遍历 target.positions，不能据此认定目标外没有实际持仓。
     for position in target.positions:
-        # 实际持仓来自独立对账后的内部账户事实。
         lines.append(
             f"| {position.security_id} | {position.sector} | {position.weight:.2%} | {position.quantity} | {account.positions.get(position.security_id, 0)} | {position.reason} |"
         )
@@ -93,11 +86,10 @@ def render_report(
             "|---|---|---|---:|---:|---:|---:|---|",
         ]
     )
-    # 订单与成交投影明确区分。
+    # intent 是发送前保存的原始委托要求；order.filled_quantity/status 是当前订单
+    # 投影，不能用“已提交总数量”冒充实际成交数量，现金及费用仍以下方账户事实为准。
     for order in orders:
-        # 订单意图包含从目标到执行的稳定身份。
         intent = order.intent
-        # 限价与费用都保留十进制金额。
         lines.append(
             f"| {intent.client_order_id} | {intent.security_id} | {intent.side} | {intent.quantity} | {order.filled_quantity} | {intent.limit_price} | {intent.reserved_fee} | {order.status} |"
         )
@@ -112,7 +104,7 @@ def render_report(
             "",
         ]
     )
-    # 关键告警同时写入独立 JSONL，本报告只是展示副本。
+    # 这里只展示传入告警；独立 JSONL 由应用装配层写入。
     for alert in alerts:
         # 未确认告警不得暗示已有处置人。
         lines.append(
@@ -127,5 +119,4 @@ def render_report(
             "",
         ]
     )
-    # 固定换行保证同事实产生同报告。
     return "\n".join(lines)

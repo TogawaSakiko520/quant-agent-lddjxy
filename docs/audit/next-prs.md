@@ -72,4 +72,6 @@
 
 每个PR须先写需求ID和独立预期，再最小实现；自有Python逐语句中文说明、中文docstring与类型，复杂公式说明索引/单位/边界。同步契约/Schema样例、配置说明、相关文档、需求映射、PROJECT_STATE/CHANGELOG；不受影响者记录理由。实际运行`uv run --offline --locked quant-core check`和新目录demo/replay，记录失败/警告；风险、CI、锁和测试断言变更独立复核。不得删除测试、降低断言、放松风控或自动批准发布。
 
+2026-09-19 更新：上段保留原审计建议口径，其中对未来工作的「逐语句中文说明」要求已由 [根 AGENTS.md 的 QC-014 分层解释规范](../../AGENTS.md#按业务语义分层解释qc-014唯一主规范)取代；其余测试、风险、依赖、复核和发布约束继续有效。迁移依据与验证见 [注释规范迁移记录](comment-semantics-migration.md)。
+
 本次未改变业务行为，现有需求映射及测试不改；此处文件名为后续拟修改清单，不是已完成变更。免费路线与限价支持冲突详见[ADR](../adr/free-paper-route.md)，各级放行仍以[readiness](readiness.md)和[阻塞清单](launch-blockers.md)为准。

@@ -191,7 +191,21 @@
     ],
     "docs": [
       "AGENTS.md",
-      "docs/runbooks/ai-maintenance.md"
+      "docs/runbooks/ai-maintenance.md",
+      "SPEC.md",
+      "tools/AGENTS.md",
+      "prompts/AGENTS.md",
+      "docs/AGENTS.md",
+      "prompts/implement.md",
+      "prompts/factor.md",
+      "prompts/review.md",
+      "prompts/handoff.md",
+      "prompts/incident.md",
+      "docs/adr/0002-governance-evidence.md",
+      "docs/code_walkthrough/business-chain.md",
+      "docs/audit/comment-semantics-migration.md",
+      "prompts/README.md",
+      "docs/audit/local-context-readability.md"
     ]
   },
   {

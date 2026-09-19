@@ -1,21 +1,13 @@
-"""无网络合成数据适配器；输出三年固定样本和下一时段独立报价。
+"""无网络合成数据适配器；输出配置日期范围内的固定样本和下一时段独立报价。
 
 样本只验证工程，价格轨迹不是历史市场，也不证明因子存在超额收益。
 """
 
-# 正弦分量生成可重现的市场状态变化。
 import math
-
-# 每个实例使用局部随机源，禁止改变全局随机状态。
 import random
-
-# 日期偏移用于构建公开与可用时间，不读取真实时钟。
 from datetime import timedelta
-
-# 金额在执行边界转换为十进制。
 from decimal import Decimal
 
-# 契约集中定义单位、时间与内容哈希。
 from quant_core.contracts import (
     DemoConfig,
     MarketDataRecord,
@@ -29,26 +21,26 @@ from quant_core.contracts import (
 def generate_fixture(
     config: DemoConfig, calendar: TradingCalendar
 ) -> tuple[list[MarketDataRecord], list[SecurityRecord]]:
-    """生成固定合成行情和主表；返回记录列表，空日历抛 ValueError，无文件或网络副作用。"""
-    # 只采用实际市场交易日，不用工作日生成器替代。
+    """按配置种子和实际交易日历生成普通股、基准行情及相应历史主表。
+
+    行情价格保留六位小数；不含公司行动，因此总回报收盘等于原始收盘。
+    收盘十五分钟后标为可用是合成延迟，不能当作真实首次观测记录。
+    返回 (行情列表, 主表列表)：前者每证券每交易日一条，后者每证券一条初始身份。
+    应用用完整样本按决策时点 build_snapshot，并保存原始输入；这里不选股或生成订单。
+    返回记录已带内容哈希；日期范围内无交易日时抛 ValueError。
+    """
     sessions = calendar.sessions(config.start, config.end)
-    # 空范围无法提供可验证的历史。
     if not sessions:
-        # 报告环境或日期配置错误。
         raise ValueError("样本范围没有交易日")
     # 局部种子保证不依赖其他模块的随机调用。
     rng = random.Random(config.seed)
-    # 汇总逐条带来源的行情。
     records: list[MarketDataRecord] = []
-    # 汇总历史证券身份，基准是单独类型。
     securities: list[SecurityRecord] = []
-    # 普通股和基准使用固定稳定身份。
+    # 稳定 ID 在行情与主表之间建立关联；BENCH 是观察市场状态的基准，不参与普通股选股。
     identities = [f"S{number:03d}" for number in range(1, config.securities + 1)] + ["BENCH"]
     # 主表在首个交易日开盘前已经可用。
     master_at = calendar.open_at(sessions[0]) - timedelta(days=1)
-    # 每个证券生成独立且确定的轨迹。
     for index, security_id in enumerate(identities):
-        # 基准不进入普通股选股池。
         is_benchmark = security_id == "BENCH"
         # 行业轮转确保样本可以验证行业约束。
         security = SecurityRecord(
@@ -62,25 +54,20 @@ def generate_fixture(
             published_at=master_at,
             available_at=master_at,
         )
-        # 输入内容封印后才能进入时点快照。
         securities.append(seal_record(security))
         # 初始价格按身份变化，避免全部证券具有相同取整结果。
         previous_close = 50.0 + index * 3.0
-        # 每个交易日有明确开收盘与可用时间。
         for offset, session in enumerate(sessions):
             # 小幅隔夜变化提供独立开盘标签价格。
             overnight = rng.uniform(-0.001, 0.001)
-            # 原始开盘价格不包含之后的盘内信息。
             raw_open = round(previous_close * (1 + overnight), 6)
             # 固定周期市场分量展示趋势切换，不代表市场预测。
             market_component = 0.00025 + 0.0006 * math.sin(offset / 85)
             # 不同证券的波动和漂移为因子提供可区分样本。
             noise = rng.uniform(-1, 1) * (0.004 if is_benchmark else 0.004 + index * 0.0003)
-            # 演示收益保持有界且价格为正。
             daily_return = market_component + noise + (0 if is_benchmark else index * 0.000012)
             # 六位小数固定输入序列，业务金额另使用 Decimal。
             raw_close = round(raw_open * (1 + daily_return), 6)
-            # 事件时间为该交易日真实收盘时刻。
             close_at = calendar.close_at(session)
             # 合成可用延迟固定十五分钟，绝不标为实际到达记录。
             available_at = close_at + timedelta(minutes=15)
@@ -97,25 +84,27 @@ def generate_fixture(
                 published_at=close_at,
                 available_at=available_at,
             )
-            # 每条行情保存独立哈希，便于定位破损输入。
+            # seal_record 返回带内容哈希的模型副本，供接入层核验内容一致性；哈希不使
+            # 合成轨迹变成真实行情，也不补造 first_seen_at 的实际观测证据。
             records.append(seal_record(record))
-            # 下一日开盘只以已生成的前一收盘为基准。
             previous_close = raw_close
     # 固定排序是快照和研究复现的前提。
     records.sort(key=lambda item: (item.session, item.security_id, item.revision))
-    # 交付数据与主表，调用者决定写入位置。
     return records, securities
 
 
 def fixture_quotes(
     records: list[MarketDataRecord], calendar: TradingCalendar, *, execution: bool
 ) -> dict[str, Quote]:
-    """产生最后收盘或下一开盘的合成原始报价；返回身份映射，空记录抛 ValueError。"""
-    # 没有输入时不能凭空生成价格。
+    """由最后样本日的原始收盘生成按证券 ID 索引的决策或执行报价。
+
+    execution=False 使用当日收盘；True 使用下一交易日开盘时刻与 0.1% 合成跳空，
+    该未来报价只能用于执行，不能回填决策。价格取六位小数，空记录抛 ValueError。
+    records 通常来自已过滤版本的 snapshot.records；本函数不另做历史版本选择。
+    返回字典的键为稳定证券 ID，Quote.price 为每股美元，供组合估值或执行风控读取。
+    """
     if not records:
-        # 显式区分无样本与零价格。
         raise ValueError("生成报价需要行情")
-    # 最新交易日从样本决定，不使用今天。
     last_session = max(item.session for item in records)
     # 决策报价用历史收盘，执行报价为下一时段独立事件。
     at = (

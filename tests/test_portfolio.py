@@ -1,18 +1,11 @@
 """组合约束、现金预留与挂单净额的独立固定样本测试。"""
 
-# 显式UTC交易时点使测试不依赖今天。
 from datetime import UTC, datetime, timedelta
-
-# 资金期望以十进制精确断言。
 from decimal import Decimal
 
-# 异常边界验证不能被静默降级。
 import pytest
-
-# 固定历史身份夹具不实现被测组合算法。
 from test_data import security_record
 
-# 共享类型用于明确建立目标和账户。
 from quant_core.contracts import (
     AccountSnapshot,
     ContractError,
@@ -23,16 +16,18 @@ from quant_core.contracts import (
     SecurityRecord,
     SignalSet,
 )
-
-# 被测目标及差额入口。
 from quant_core.portfolio import build_portfolio, plan_orders
 
 
 def portfolio_case(
     count: int = 20,
 ) -> tuple[SignalSet, AccountSnapshot, dict[str, Quote], list[SecurityRecord], DemoConfig]:
-    """创建100000美元、每股100美元和固定排序候选；仅装配输入，无外部副作用。"""
-    # 周五收盘后决策。
+    """装配固定候选场景，返回信号、实际账户、报价、证券主表和约束配置。
+
+    count 只改变候选数量；每只报价均为 100 美元，账户为 100000 美元且空仓。
+    signals.scores 是按稳定证券 ID 排好的候选评分列表，quotes 按同一 ID 索引；
+    masters 提供行业与可交易资格。这些都是被测组合函数的输入，不是目标仓位。
+    """
     at = datetime(2023, 1, 6, 21, 1, tzinfo=UTC)
     # 行业轮转防止基础样本意外触发行业集中。
     masters = [security_record(f"S{index:02d}", f"sector-{index % 6}") for index in range(count)]
@@ -46,30 +41,25 @@ def portfolio_case(
         )
         for record in masters
     ]
-    # 固定决策身份确保幂等可核验。
     signals = SignalSet(
         decision_id="decision", decision_time=at, snapshot_id="snapshot", scores=scores
     )
-    # 全现金初始账户无隐含融资。
     account = AccountSnapshot(as_of=at, cash=Decimal("100000"), available_cash=Decimal("100000"))
-    # 决策报价不能包含下一开盘的信息。
     quotes = {
         record.security_id: Quote(security_id=record.security_id, at=at, price=Decimal("100"))
         for record in masters
     }
-    # 所有演示参数使用同一严格契约。
     return signals, account, quotes, masters, DemoConfig()
 
 
 def test_equal_targets_cash_and_halted_old_position() -> None:
-    """20只各45股形成90%目标，候选不足留现金，停牌旧仓不消失，无外部副作用。"""
-    # 固定100000美元与100美元每股可以直接手算。
+    """20只各45股形成90%目标，候选不足留现金，停牌旧仓不消失。"""
     signals, account, quotes, masters, config = portfolio_case()
-    # 构建初始组合目标。
+    # 目标是希望持有的整股数量，生成目标本身不会修改 account 或产生真实成交。
     target = build_portfolio(signals, account, quotes, masters, config)
+    # 每只基础目标固定4.5%：100000 × 0.045 / 100 = 45股，20只合计90%，不是按候选数重新均分。
     # 各目标4500美元，恰好45股。
     assert [position.quantity for position in target.positions] == [45] * 20
-    # 余下10000美元保持现金。
     assert target.cash_weight == pytest.approx(0.1)
     # 两只候选不应重新归一化成满仓。
     sparse = build_portfolio(
@@ -79,7 +69,6 @@ def test_equal_targets_cash_and_halted_old_position() -> None:
     assert sparse.cash_weight == pytest.approx(0.91)
     # 新股票池中不可交易旧仓仍属于账户事实。
     halted = security_record("OLD", "legacy", tradable=False)
-    # 增加一只100美元的停牌报价。
     quotes["OLD"] = Quote(
         security_id="OLD", at=signals.decision_time, price=Decimal("100"), tradable=False
     )
@@ -93,28 +82,22 @@ def test_equal_targets_cash_and_halted_old_position() -> None:
     )
     # 停牌仓位必须占用一个名额和风险预算。
     result = build_portfolio(signals, held, quotes, masters + [halted], config)
-    # 不能假设停牌旧仓已经卖出。
     assert (
         next(position.quantity for position in result.positions if position.security_id == "OLD")
         == 10
     )
-    # 名额不能偷偷扩为21。
     assert len(result.positions) == 20
 
 
 def test_pending_orders_netting_cash_and_execution_reserve() -> None:
-    """执行涨价预留缩减数量，已有挂单不重复买入，费用现金预算成立，无外部副作用。"""
-    # 先建立盘后目标。
+    """执行涨价预留缩减数量，已有挂单不重复买入，费用现金预算成立。"""
     signals, account, quotes, masters, config = portfolio_case()
-    # 决策阶段不能看到未来开盘价格。
     target = build_portfolio(signals, account, quotes, masters, config)
     # 下一交易时段报价比决策价高0.1%。
     execution_at = datetime(2023, 1, 9, 14, 30, tzinfo=UTC)
-    # 独立原始报价事件用于执行规划。
     execution_quotes = {
         sid: Quote(security_id=sid, at=execution_at, price=Decimal("100.1")) for sid in quotes
     }
-    # 初始全现金账户事实在执行时确认。
     account = account.model_copy(update={"as_of": execution_at})
     # 规划须容纳1%价格空间，而不是放宽90%上限。
     intents = plan_orders(
@@ -127,15 +110,14 @@ def test_pending_orders_netting_cash_and_execution_reserve() -> None:
         execution_at,
         security_records=masters,
     )
-    # 全部限价市值加费用必须在最保守总仓位预算之内。
+    # 汇总限价市值；执行涨价与费用预留应使计划规模低于原90%目标。
     total = sum((intent.quantity * intent.limit_price for intent in intents), Decimal("0"))
-    # 明确不允许满目标数量在执行报价变化后突破预算。
     assert total < Decimal("90000")
-    # 计划必须保留至少一个未完全实现目标。
     assert sum(intent.quantity for intent in intents) < 900
+    # intents 是本轮建议下的订单意图；已有目标并不代表这些股数已经买到。
+    # OPEN 的 filled_quantity 默认为0，整张意图数量仍未成交；必须占用现金和目标差额。
     # 相同挂单存在时不能生成第二个净重复买单。
     pending = [OrderRecord(intent=intents[0], status="OPEN", broker_order_id="broker-1")]
-    # 再规划将挂单计入数量和现金预留。
     repeated = plan_orders(
         target,
         account,
@@ -146,11 +128,10 @@ def test_pending_orders_netting_cash_and_execution_reserve() -> None:
         execution_at,
         security_records=masters,
     )
-    # 初始第一只股票只能有原来的订单。
     assert all(intent.security_id != intents[0].security_id for intent in repeated)
+    # model_copy 在这里刻意替换状态而不重新构造模型，让规划入口面对未知挂单。
     # 未知状态必须先恢复。
     with pytest.raises(ContractError, match="未知"):
-        # 不根据超时猜测订单失败再重发。
         plan_orders(
             target,
             account,
@@ -163,21 +144,16 @@ def test_pending_orders_netting_cash_and_execution_reserve() -> None:
 
 
 def test_future_quote_rejected_and_liquidity_is_not_relaxed() -> None:
-    """未来报价阻止目标生成，低ADV只能缩量不能放宽上限，无外部副作用。"""
-    # 单一目标仍保留其他资金现金。
+    """未来报价阻止目标生成，低ADV只能缩量不能放宽上限。"""
     signals, account, quotes, masters, config = portfolio_case(2)
-    # 显式构造未来报价。
     future = {
         sid: quote.model_copy(update={"at": quote.at + timedelta(days=1)})
         for sid, quote in quotes.items()
     }
-    # 下一时段价格不得反向影响过去决策。
     with pytest.raises(ContractError, match="未来报价"):
-        # 数据时点不符时明确停止。
         build_portfolio(signals, account, future, masters, config)
     # 账户事实也不能从下一执行时点回填到盘后目标。
     with pytest.raises(ContractError, match="未来账户"):
-        # 禁止只检查报价而遗漏账户时点。
         build_portfolio(
             signals,
             account.model_copy(update={"as_of": signals.decision_time + timedelta(days=1)}),
@@ -185,41 +161,32 @@ def test_future_quote_rejected_and_liquidity_is_not_relaxed() -> None:
             masters,
             config,
         )
-    # 当前合法目标仍能构建。
     target = build_portfolio(signals, account, quotes, masters, config)
     # ADV为100股，1%限制每单仅1股。
     intents = plan_orders(
         target, account, [], quotes, dict.fromkeys(quotes, 100.0), config, signals.decision_time
     )
-    # 小额交易不应被静默扩大以追赶目标。
     assert [intent.quantity for intent in intents] == [1, 1]
 
 
 def test_sector_cap_and_realized_turnover_requirements() -> None:
-    """行业不足留现金；90%换仓不能突破100%gross预算，已有成交须用真实金额，无副作用。"""
-    # 基础固定样本有100000美元和20候选。
+    """行业不足留现金；90%换仓不能突破100%gross预算，已有成交须用真实金额。"""
     signals, account, quotes, masters, config = portfolio_case()
     # 所有评分证券强制归属同一行业，独立验证25%上限。
     concentrated = signals.model_copy(
         update={"scores": [score.model_copy(update={"sector": "one"}) for score in signals.scores]}
     )
-    # 行业总额不得被目标再次归一化。
     capped = build_portfolio(concentrated, account, quotes, masters, config)
     # 5只4.5%加第6只2.5%，合计恰好25%。
     assert sum(position.quantity for position in capped.positions) == 250
-    # 无法投资部分明确留现金。
     assert capped.cash_weight == pytest.approx(0.75)
-    # 正常20只目标用于换仓测试。
     target = build_portfolio(signals, account, quotes, masters, config)
     # 旧仓900股共90000美元，卖出后必须使用真实90000成交换手。
     execution_at = datetime(2023, 1, 9, 14, 30, tzinfo=UTC)
-    # 执行报价与决策价相同使手算清晰。
     execution_quotes = {
         sid: quote.model_copy(update={"at": execution_at}) for sid, quote in quotes.items()
     }
-    # 独立旧仓报价，不把它混入新目标。
     execution_quotes["OLD"] = Quote(security_id="OLD", at=execution_at, price=Decimal("100"))
-    # 真实旧账户90%仓位、10%现金。
     before = account.model_copy(
         update={
             "as_of": execution_at,
@@ -239,9 +206,9 @@ def test_sector_cap_and_realized_turnover_requirements() -> None:
         execution_at,
         security_records=masters + [security_record("OLD", "legacy")],
     )
-    # 本轮只产生已确认旧仓的卖单。
     assert len(sells) == 1 and sells[0].side == "SELL" and sells[0].quantity == 900
-    # 模拟券商已经确认该订单全成。
+    # 订单的 filled_quantity 是累计成交，账户 before/after 则分别代表卖出前后的实际资产。
+    # 仅把订单标为 FILLED 不会自动改写账户，所以后面另给手算后的 after。
     completed = OrderRecord(
         intent=sells[0], status="FILLED", filled_quantity=900, broker_order_id="sold"
     )
@@ -255,7 +222,6 @@ def test_sector_cap_and_realized_turnover_requirements() -> None:
     )
     # 不允许用99美元限价假装100美元真实成交换手。
     with pytest.raises(ContractError, match="真实turnover_used"):
-        # 已有成交必须明确提供唯一成交事件汇总。
         plan_orders(
             target,
             after,
@@ -265,6 +231,7 @@ def test_sector_cap_and_realized_turnover_requirements() -> None:
             config,
             execution_at,
         )
+    # gross 换手按买卖金额绝对值相加，不用卖出抵销买入。
     # 真实成交90000美元只剩10000美元gross预算。
     buys = plan_orders(
         target,
@@ -277,29 +244,21 @@ def test_sector_cap_and_realized_turnover_requirements() -> None:
         security_records=masters,
         turnover_used=Decimal("90000"),
     )
-    # 新买单不得超过10000美元剩余限价总额。
     assert sum((intent.quantity * intent.limit_price for intent in buys), Decimal("0")) <= Decimal(
         "10000"
     )
-    # 大部分90%目标必须留待未来决策，不能放宽换手预算。
     assert sum(intent.quantity for intent in buys) < 100
 
 
 def test_wrong_security_quote_cannot_value_or_plan_orders() -> None:
-    """字典键与报价消息证券错配不能估值、建目标或规划订单，无外部副作用。"""
-    # 固定两只候选和合法盘后报价。
+    """字典键与报价消息证券错配不能估值、建目标或规划订单。"""
     signals, account, quotes, masters, config = portfolio_case(2)
-    # 先取得合法目标供规划阶段独立检查。
     target = build_portfolio(signals, account, quotes, masters, config)
     # 篡改消息证券身份，字典键仍保持原证券。
     wrong_quotes = quotes | {"S00": quotes["S00"].model_copy(update={"security_id": "OTHER"})}
-    # 目标不能借其他证券价格构造。
     with pytest.raises(ContractError, match="报价证券身份"):
-        # 全现金账户也必须核验候选报价身份。
         build_portfolio(signals, account, wrong_quotes, masters, config)
-    # 已有合法目标也不能让执行价格错配。
     with pytest.raises(ContractError, match="报价证券身份"):
-        # 下单规划重新执行身份核验。
         plan_orders(
             target,
             account,

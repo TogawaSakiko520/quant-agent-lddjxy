@@ -1,8 +1,35 @@
 # 项目当前状态
 
-本文件是交接事实源；聊天中的承诺和计划不等同于已实现能力。更新日期：2026-09-13。
+本文件是交接事实源；聊天中的承诺和计划不等同于已实现能力。更新日期：2026-09-19。
 
-## 当前阶段：上线准备审计（2026-09-13）
+## 当前阶段：QC-014 第二轮局部上下文增强完成（2026-09-19）
+
+本轮以第一轮尚未提交的工作区为起点，编辑前保存114个文件及SHA-256清单到 `artifacts/readability-context-20260919/baseline/`；保留原Git状态和补丁，没有重置或把上轮改动计为本轮新增。根唯一规范补入关键变量来源/形状/单位、事实/目标/预算区别、调用去向、库用法效果和重要出口；允许在关键位置简短重述完整定义，不恢复逐句门槛。同步SPEC、维护模板、工具子规则、维护手册、代码导读及需求路径。第一轮迁移记录保持原字节，以下第一轮验收正文保留，仅将阶段标题标为历史。
+
+- 先补 application、portfolio、signals、execution/sqlite_store 及对应测试样板，再检查其他自有文件。改善 factors/signals/target/intents衔接、effective与risk_quantities、nav/cash/reserved/allocated/remaining、嵌套/复合索引、model_copy/validate/dump、事务/锁与UNKNOWN/空结果等局部阅读障碍。完整前后示例、具名新读者抽样和实际命令见 [第二轮记录](docs/audit/local-context-readability.md)。
+- 所有40个自有Python对**本轮起始工作区快照**的AST一致，仅忽略真正docstring和位置信息，保留普通字符串、类型注释、签名、变量、运算、分支、测试数据与断言。快照所有文件摘要核验通过；治理检查器/治理测试、CI、配置、依赖锁及全部Schema/样例保持起点字节，没有本轮逻辑豁免。
+- 当前锁定环境实际 `quant-core check --base 01205ca` 退出0：**133 passed、20 warnings、52.58秒**；治理、Ruff、格式、mypy通过。该Git基线的敏感提示包含上轮未提交成果，未冒称它是第二轮差异；本轮比较证据为 `round-verification.json` 与 `round.diff`。
+- 现有契约生成检查 `tools.export_contracts --check` 退出0；业务未显式读取 `__doc__`/`inspect.getdoc`，模型Schema描述来自类docstring。导出的契约类说明未变，生成文件无漂移，未执行 `--write`。已读取锁定Pydantic源码与SQLite上下文说明核对复制/验证/序列化/事务语义，证据 `library-inspection.json`。
+- 新目录 demo、validate、replay 均退出0，回放五项全部true。起始源码指纹为 `bfe76e9a5ba554fd23577b917f1824aa81e9519512cb6b691aad42a9660549b2`，本轮清单与当前源码均为 `fdf13598bd0c799221b85059c66f36e889f226101d0a57c9ff7d5b606018f518`，dirty=true；未覆盖第一轮证据或旧运行。
+- 不同作者已完成独立AI语义复核，按实际变量定义/表达式/调用/状态出口抽样检查对象、来源、结构单位、变化、去向和失败后果。发现并更正的说明问题包括空folds原因、固定4.5%目标而非候选均分、risk.json不是当前报告输入、record_order本地状态来源等；全部只改说明。作者自检与独立复核分别留证，不以注释数量验收。
+
+本轮未升级或重装依赖，现有正式检查与离线命令均成功；第三方弃用警告及macOS沙箱PyArrow sysctl权限诊断保留。一个作者AST比较器最初将TypeIgnore.lineno位置误算为差异，修正比较器后保留类型忽略标签并通过，未因此改业务代码。远端CI、真实账户、持续Paper及独立research CLI/完整灾恢未验证；已有研究/恢复测试在完整检查中执行。F01/F02/F03及既有边界观察仍未修复。未发送外部交易、发布、部署、提交、推送或修改远端权限。
+
+## 第一轮记录：QC-014 注释规范迁移完成（2026-09-19，历史）
+
+按用户明确授权，将「逐语句中文注释」改为根 AGENTS.md 集中定义的「按业务语义分层解释」。读者为懂基本 Python、不了解项目及交易业务的开发者。规范、子规则、QC-014/需求映射、维护提示词、维护手册、治理 ADR 和代码导读同步；先完成 factors/execution/test_factors 样板，再逐段整理 src/tests/tools。旧审计、旧验收及历史 CHANGELOG 保留当时口径，未来 PR 条款新增替代注记。完整范围、前后示例、测试迁移和命令见 [迁移记录](docs/audit/comment-semantics-migration.md)。
+
+- 开工工作区干净，基线 `01205cae9f3c396938bdcdbe6c6cd4af216f89cb`。除 `tools/governance.py` 的注释检查规则及 `tests/test_governance.py` 对应迁移/新增测试外，全部跟踪 Python（38 个文件）去除真正 docstring/位置后的 AST 与基线一致；普通字符串、签名、控制流、运算、测试输入和业务断言不变。检查器其余函数/常量及无关治理测试亦一致。
+- 取消普通语句邻接中文与 else/except/finally 单独注释门槛；保留真正中文模块/类/函数 docstring、完整函数类型、依赖、需求、Schema/样例、敏感差异及全部其他检查，排除集合仍为空。新旧 28 个固定规则样例先 red（旧规则 10 失败）再 green（新规则全部通过）。
+- 临时安装历史工具版本 uv 0.12.5，并以 bundled Python 3.12.14 在本地 `.venv` 执行 `uv sync --locked`；依赖版本与 uv.lock 未变。最初缺 uv、沙箱 DNS 不可用和 offline sync 缺缓存均已如实记录，之后受控联网仅用于安装工具/锁定包。未连接真实账户。
+- 完整 `quant-core check --base 01205ca` 两次退出 0：首次 **133 passed、20 warnings、55.11 秒**；独立复核修正说明后最终 **133 passed、20 warnings、57.04 秒**。Ruff、格式、mypy、治理均通过；敏感差异提示保留并经跨作者复核，没有伪装成自动批准。最终完整检查后只再修正两条业务测试注释，并以 AST、静态治理及格式检查确认。
+- `demo`、`validate`、`replay` 在新目录实际退出 0；回放 account/orders/factors/signals/target 全为 true。`artifacts/comment-semantics-20260919/` 保存日志、AST 核验脚本/结果、新 demo/replay；清单 `dirty=true`，源码指纹 `bfe76e9a5ba554fd23577b917f1824aa81e9519512cb6b691aad42a9660549b2` 与当前源码一致，未覆盖旧快照。
+- docstring 使用已检索：业务未显式读取 `__doc__`/`inspect.getdoc`，治理通过 AST 读取，模型生成 Schema 会读取类说明。导出契约模型类 docstring 保持不变；ResearchFold 的类说明虽澄清职责，但不属于既有跨仓库 Schema 导出集合。现有 `tools.export_contracts --check` 两次只读通过，Schema/样例字节、字段、类型、默认值和约束未改，无需重新写生成文件。
+- 已完成独立 AI 交叉复核：治理规则/测试、执行与适配器、核心业务模块、所有业务测试及规范文档由不同作者检查。复核纠正了异常类型、状态事件返回含义、百分位并列端点、备份/文件集合原子性、同机锁与测试独立性等说明，未混入业务修复。作者自检与独立复核分开记录。
+
+20 条既有第三方弃用警告未屏蔽；macOS 沙箱下 validate/replay 输出 PyArrow CPU 信息 sysctl 权限警告但退出 0，日志保留。CI 权限、依赖锁、配置、业务公式与交易边界未改；远端 CI、真实账户、持续 Paper 和生产环境仍未验证。本次本地通过不消除 F01/F02 既有缺陷及 F03 碎股缺口。未发布、部署、提交或推送；本轮注释迁移完成，下一业务工程步骤仍按原上线阻塞清单单独安排。
+
+## 上线准备审计记录（2026-09-13，历史）
 
 用户授权按300美元、零付费API任务书审计；本次未修改业务源码、测试、配置、依赖锁、CI或根规则，未访问账户、发送Alpaca Paper/实盘订单、部署或提交/推送。开工工作树干净，分支main、HEAD=`f01a1237bc02deae4957ceecd29639e16037759d`，已有109个跟踪文件；首轮“源码未提交”表述已过时。审计文档写入后，demo/replay清单诚实记录dirty=true，源代码指纹仍一致。
 
