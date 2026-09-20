@@ -62,6 +62,8 @@ uv export --locked --offline --format requirements-txt --group dev --no-emit-pro
 
 ## 自动检查与边界
 
+仓库不再维护 GitHub Actions CI 工作流，根 `.github/` 目录已移除并被 Git 忽略。本地检查和独立复核继续按本手册执行；推送代码不会自动运行已移除的工作流。
+
 `quant-core check` 执行的实际子项以 CLI 和 PROJECT_STATE 链接的验收记录为准。治理工具检查 src/tests/tools 中全部自有 Python 的模块/类/函数真正中文 docstring、函数类型、核心依赖和需求引用。普通字符串不能替代 docstring；不要求普通语句或 else/except/finally 紧邻中文说明，不按注释比例、固定行数、段落标签或关键词计数打分。排除名单保持为空。
 
 `quant-core check --base <实际评审基线>` 将基线交给 `tools.governance.sensitive_diff_report(root, base)`；它覆盖已暂存、未暂存、删除和未跟踪文件，使用明确 Git 基线报告测试、风险/执行/账务、配置、AGENTS、CI、提示词、治理工具与依赖变更。未给基线时明确“未执行差异审计”。报告不是批准文件；删除测试或降低断言的禁止不能通过勾选框解除。
@@ -92,7 +94,7 @@ uv export --locked --offline --format requirements-txt --group dev --no-emit-pro
 
 先运行 `command -v uv` 和 `uv --version`。若命令不可用，先检查 `~/.local/bin/uv` 等已有安装位置；只是没有加入 PATH 时，不需要重复安装。PATH 是终端查找命令的目录列表。
 
-确实没有安装时，可按官方指定版本方式安装 **uv 0.12.5**，与仓库 CI 使用的版本一致。以下步骤会联网，只适用于 `~/.local/bin/uv` 和 `~/.local/bin/uvx` 均不存在（也没有同名符号链接）的情况；已有其他版本不自动覆盖或升级。
+确实没有安装时，可按官方指定版本方式安装 **uv 0.12.5**，与仓库已验证的本地工具版本一致。以下步骤会联网，只适用于 `~/.local/bin/uv` 和 `~/.local/bin/uvx` 均不存在（也没有同名符号链接）的情况；已有其他版本不自动覆盖或升级。
 
 ```bash
 uv_installer=$(mktemp)
