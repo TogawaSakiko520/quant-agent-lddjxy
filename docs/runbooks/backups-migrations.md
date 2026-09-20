@@ -1,6 +1,8 @@
 # 备份、恢复与停止写入后的迁移
 
-本页提供真实维护工具，不配置生产服务或自动发布。运行前读取根 AGENTS、当前 PROJECT_STATE 和 recovery.md；保留每条命令的结果和工具输出的文件/逻辑哈希。备份复制使用 SQLite backup API（数据库自身提供的一致性复制接口），不直接复制正在写入的主文件。
+本页用于在停止写入后备份 SQLite 并恢复到新路径。先确认运行类型和[恢复边界](recovery.md)，保留命令结果及文件/逻辑哈希；不配置生产服务或自动发布。备份复制使用 SQLite backup API（数据库自身提供的一致性复制接口），不直接复制正在写入的主文件。
+
+下文示例为离线 demo 的两库流程。Conda 路线将 `uv run --offline --locked python` 换为 `conda run -n quant-core-dev python`，将 `uv run --offline --locked quant-core` 换为 `conda run -n quant-core-dev quant-core`。Paper 只有内部库，且还需核对远端事实，不能照搬 FakeBroker 两库步骤。
 
 ## 先确认没有写入者
 
@@ -37,7 +39,7 @@ uv run --offline --locked quant-core replay --run-dir artifacts/demo --output ar
 
 ## 契约生成与迁移边界
 
-共同消息版本当前为 `1.0.0`；首版没有历史生产库迁移，也没有通用 SQL 自动迁移命令。SQLite 的 `PRAGMA user_version` 是数据库字段，不能与消息 `schema_version` 混为一谈。新版本迁移必须先编写 ADR、兼容/回放测试、备份和回滚步骤，再在停止写入的复制环境验证；未完成这些工作不得直接对运行库执行猜测的 ALTER TABLE。
+MarketDataRecord、SecurityRecord、Score、TargetPosition 当前默认 `1.1.0` 并兼容受限的 `1.0.0` 读取；其他消息仍为 `1.0.0`，详细兼容语义见[共同契约](../contracts.md#ma价格策略扩展)。首版没有历史生产库迁移，也没有通用 SQL 自动迁移命令。SQLite 的 `PRAGMA user_version` 是数据库字段，不能与消息 `schema_version` 混为一谈。新版本迁移必须先编写 ADR、兼容/回放测试、备份和回滚步骤，再在停止写入的复制环境验证；未完成这些工作不得直接对运行库执行猜测的 ALTER TABLE。
 
 以下命令已实现，用于维护**可再生成的源代码契约文件**：
 

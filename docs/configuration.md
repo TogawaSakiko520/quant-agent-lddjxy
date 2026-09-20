@@ -1,6 +1,10 @@
-# 演示配置字段与行为
+# 配置参考
 
-权威定义为 `contracts.DemoConfig`，示例为 `configs/demo.toml`。全部参数仅用于离线工程，**不是投资建议或实盘批准预算**。配置拒绝额外字段、未知版本、联网/实盘模式和非 DEMO 账户；金额用美元 Decimal（十进制），比例用小数表示。
+本页区分离线演示与真实模拟账户配置；安装见[快速开始](runbooks/quickstart.md)，账户操作见[Paper 手册](runbooks/alpaca-paper.md)。金额以 USD 表示，比例用小数（0.045 = 4.5%）。
+
+## 离线演示配置
+
+权威定义为 `contracts.DemoConfig`，示例为 `configs/demo.toml`。本节参数仅用于离线工程，**不是投资建议或实盘批准预算**。配置拒绝额外字段、未知版本、联网/实盘模式和非 DEMO 账户；金额用美元 Decimal（十进制），比例用小数表示。
 
 | 字段 | 当前默认值 | 单位与含义 |
 |---|---|---|
@@ -38,7 +42,7 @@
 
 [configs/alpaca-paper.example.toml](../configs/alpaca-paper.example.toml) 由 `PaperConfig` 校验，和Demo配置分别装配。`account_id` 是用户明确指定的Paper账户，`candidates`为2—30个唯一大写代码，`budget`为策略分配美元（不等于全部余额/购买力），`history_start/end`为日线查询日期，`history_feed`固定SIP。`quote_feed`可显式IEX或SIP，默认IEX的最新卖价只用于执行，不能用其量替代历史综合ADV。
 
-Paper继承StrategyConfig的原4.5%目标、5%单票、25%行业、90%总仓、20名额、100%换手、1%ADV、费用预留及风控参数，并拒绝本阶段对这些值的覆盖。预算不足造成零整股应保留空目标，不自动提高上限。交易主机固定Paper，行情主机固定官方数据服务；没有live回退。计划、单笔含费用金额上限、订单总数和未成交处理通过显式命令确认；凭据不进TOML。完整操作与字段解释见[Paper手册](runbooks/alpaca-paper.md)。
+Paper继承StrategyConfig的原4.5%目标、5%单票、25%行业、90%总仓、20名额、100%换手、1%ADV、费用预留及风控参数，并拒绝本阶段对这些值的覆盖。预算不足造成零整股应保留空目标，不自动提高上限。交易主机固定Paper，行情主机固定官方数据服务；没有live回退。计划、单笔含费用金额上限、订单总数和未成交处理通过显式命令确认；凭据不进TOML。实际操作见[Paper手册](runbooks/alpaca-paper.md)。
 
 ## MA选择与边界
 

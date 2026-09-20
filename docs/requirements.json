@@ -279,7 +279,8 @@
       "docs/audit/alpaca-paper.md",
       "docs/strategies/ma-trend.md",
       "docs/audit/ma-paper.md",
-      "docs/audit/paper-queue.md"
+      "docs/audit/paper-queue.md",
+      "docs/commands.md"
     ]
   },
   {
@@ -312,7 +313,9 @@
       "docs/audit/alpaca-paper.md",
       "docs/strategies/ma-trend.md",
       "docs/audit/ma-paper.md",
-      "docs/audit/paper-queue.md"
+      "docs/audit/paper-queue.md",
+      "docs/commands.md",
+      "docs/audit/documentation-20260920.md"
     ]
   },
   {
@@ -342,7 +345,8 @@
       "docs/audit/local-context-readability.md",
       "docs/audit/readability-compliance.md",
       "docs/runbooks/alpaca-paper.md",
-      "docs/audit/alpaca-paper.md"
+      "docs/audit/alpaca-paper.md",
+      "docs/audit/documentation-20260920.md"
     ]
   },
   {
@@ -374,7 +378,8 @@
       "docs/audit/alpaca-paper.md",
       "docs/strategies/ma-trend.md",
       "docs/audit/ma-paper.md",
-      "docs/audit/paper-queue.md"
+      "docs/audit/paper-queue.md",
+      "docs/audit/documentation-20260920.md"
     ]
   },
   {

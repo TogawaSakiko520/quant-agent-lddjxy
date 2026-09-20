@@ -42,3 +42,54 @@ MarketDataRecord、SecurityRecord、Score、TargetPosition默认1.1.0且可读�
 `PaperQueueTestContext`独立描述获授权的休市单股撤单测试：绑定计划、账户、客户订单及证券ID，保留最近完整交易日原始收盘价、实际收盘/采集时间、远端休市时钟与下一开盘。字段不能作为普通策略旧报价豁免；OrderIntent仍保留未来开盘资格，原消息格式与默认哈希不改。执行服务使用独立测试方法复用同一持久化、恢复、财务风控和Broker提交；应用与适配器再次限制一股、500美元和开盘前15分钟边界。
 
 `OrderNotSent`只用于适配器确认尚未调用POST的准备失败，执行服务追加本地REJECTED；POST超时及响应不合格仍按未知恢复。`QueuePreflightRejectionProof`仅绑定审计记录所述固定旧源码缺陷、计划/客户身份和证据哈希，不是通用手工改状态接口。
+
+## Paper 输入文件参考
+
+这些补充文件由操作者提供并核验，不由展示窗口生成。`source` 为不含认证信息、查询参数或片段的 HTTPS 原资料地址；时间必须带 UTC 时区。格式通过不等于资料真实、获许可或覆盖完整。实际观察时间不能倒填为历史已知时间。
+
+### MA 普通股身份资料
+
+顶层为 `records` 数组，每只候选一条记录：
+
+| 字段 | 必需性与含义 |
+|---|---|
+| `symbol` | 必需；本次候选代码，不重复。 |
+| `alpaca_asset_id` | 必需；与本次 `assets.json` 稳定身份一致。 |
+| `asset_type_evidence` | 必需；`common_stock`，须由实际资料支持，不能仅由 `us_equity` 推断。 |
+| `source` | 必需；可追溯的 HTTPS 原资料地址。 |
+| `observed_at` | 必需；实际取得资料的 UTC 时间。 |
+| `available_at` | 可选；缺省为 `observed_at`；不能更早，且不晚于只读采集完成时点。 |
+
+结构示例（占位符必须替换，不能直接作为合格资料）：
+
+```json
+{"records": [{"symbol": "AAPL", "alpaca_asset_id": "实际资产ID", "asset_type_evidence": "common_stock", "source": "https://实际来源主机/原文路径", "observed_at": "实际UTC时间"}]}
+```
+
+资料晚于采集完成时点时重新只读采集；当前身份证据不能还原历史股票池。MA 同时要求最近连续 20 个完整交易日的原始/仅拆股日线与覆盖窗口的公司行动。公司行动按供应商 process_date 筛选，可能延迟；分页完整不等于现实行动绝对齐备。窗口内复杂身份变化或缺乏可解释处理时排除该证券。
+
+### 原双因子补充资料
+
+Alpaca `adjustment=all` 未经方法核对不能填入 `total_return_close`。补充JSON必须保存供应商来源、实际观测及可用UTC时间、普通股类别、行业分类和股息再投资总回报序列。格式如下，省略号表示需要实际完整数据，不能直接当作输入：
+
+```text
+schema_version: "1.0.0"
+quality: "good"
+price_basis: "dividend_reinvestment_total_return"
+currency: "USD"
+source: 不带查询参数和认证信息的 HTTPS 原资料地址
+methodology_source: 总回报方法的 HTTPS 原资料地址
+methodology: 可审计的方法说明及分类体系说明
+observed_at / available_at: 真实 UTC 证据时间
+securities: [{asset_id, symbol, sector, asset_type: "common_stock"}, ...]
+prices: [{asset_id, session: "YYYY-MM-DD", total_return_close}, ...]
+```
+
+此格式校验来源与时间声明，**不能证明资料真实或算法完整**。必须先核实方法、数据授权和每个候选的覆盖。总回报缺失时停止，不填零、回退普通收盘价或跳过因子。可选补充来源及现有缺口见[本轮记录](audit/alpaca-paper.md#数据缺口与最小补充选择)。
+
+
+### 行情与接口口径
+
+两策略的估值、限价和账务均用原始价格；原双因子与收益研究必须用股息再投资总回报，MA 只用仅拆股价计算指标，不纳入股息再投资。历史流动性为最近 20 个交易日 SIP 原始成交股数的均值，忽略复权响应中的调整成交量。
+
+当前适配使用官方个人 Trading API 与 Market Data API，SDK 为锁定的 `alpaca-py==0.44.0`；版本和核实来源见[接入审计](audit/alpaca-paper.md#官方接口与依赖来源)。订单列表请求上限 500，短页结束、满页按唯一 ID 继续，重复身份或不推进拒绝；活动按活动 ID 读到空页，行情按 `next_page_token` 读完。已有真实验证仅覆盖小规模订单，大账户分页未验收。

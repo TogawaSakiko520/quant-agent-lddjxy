@@ -3,12 +3,12 @@
 ## 接手与实施
 
 1. 显式读取根及相关子目录 AGENTS、PROJECT_STATE、SPEC、ARCHITECTURE、关联因子/契约/运行手册；检查真实 Git 状态，不覆盖他人改动。
-2. 写清需求 ID、旧行为、新行为和受影响模块/接口/公式/配置/测试/文档。先形成小范围计划；本轮已授权的离线实现无需反复请求确认。
+2. 写清需求 ID、旧行为、新行为和受影响模块/接口/公式/配置/测试/文档。先形成小范围计划；当前任务已授权范围无需反复请求确认，历史授权不自动延续。
 3. 为行为边界建立可独立手算或可信固定样本的测试。不得直接调用被测实现生成期望；回归失败须先理解原因。
 4. 小步修改生产源码，按 [根规则的分层解释规范](../../AGENTS.md#按业务语义分层解释qc-014唯一主规范)同步业务说明、docstring、类型、配置解释、需求映射和操作手册。确实不受影响的关联项记录理由。
 5. 运行实际自动检查与离线演示；记录命令、退出码、失败和产物。不得删失败测试、降断言、放松风控，或修改排除范围以获得通过。
 6. 独立复核公式、时点、订单/账务与风险、中文说明语义和文档同步。自检不能冒称独立复核；AI 复核也不能代替实际的发布授权。
-7. 更新 PROJECT_STATE 与 CHANGELOG。只有在授权策略、账户和风险边界及发布流程均满足时，人工审批相应发布；普通已批准策略无需逐笔确认。
+7. 更新 PROJECT_STATE 的唯一当前摘要和证据入口，CHANGELOG 只记按时间的主要变更及验证摘要。完整命令、失败过程、日志和历史阶段集中保存在对应验收记录，不向两个入口重复追加全文。只有在授权策略、账户和风险边界及发布流程均满足时，人工审批相应发布；普通已批准策略无需逐笔确认。
 
 ## 依赖声明、锁文件与导出清单
 
@@ -26,37 +26,37 @@ uv export --locked --offline --format requirements-txt --group dev --no-emit-pro
 
 使用Conda的维护者参与共同依赖升级时同样需要完成uv锁定/导出流程，或由另一位维护者完成该步骤；仅安装和运行项目时不需要uv。GitHub保存的是代码和这些共同约定，不会自动更新任何人的本地环境。
 
-此项是维护复核步骤，本轮没有增加检查器或CI规则。首次安装见[快速开始](quickstart.md)，已测环境与限制见[双入口验证](../audit/conda-compatibility.md)；此前macOS核验保留在[历史记录](../audit/macos-development.md)。
+导出与双环境验证是维护复核步骤，不自动授权增加检查器或 CI 规则。首次安装见[快速开始](quickstart.md)，已测环境与限制见[双入口验证](../audit/conda-compatibility.md)；此前macOS核验保留在[历史记录](../audit/macos-development.md)。
 
 ## 两条路线的更新与重建
 
-在仓库根目录，uv用户执行 `uv sync --locked`；Conda用户执行 `conda run -n quant-core-dev python -m pip install --require-hashes -r requirements.txt`，环境名以首次创建的实际名称为准。完整日常摘要在[README末尾](../../README.md#拉取代码后如何更新环境)。
+在仓库根目录，uv用户执行 `uv sync --locked`；Conda用户执行 `conda run -n quant-core-dev python -m pip install --require-hashes -r requirements.txt`，环境名以首次创建的实际名称为准。普通 pip 安装不自动卸载清单外包；删除依赖、更换解释器等情况按下表重建。
 
 | 变更 | uv路线 | Conda + pip路线 |
 |---|---|---|
 | 普通源码变化，依赖和安装信息不变 | 可编辑安装直接使用新源码，执行开发检查。 | 同左，不必重新安装依赖或重建。 |
 | 新增包、调整清单版本 | 按锁同步当前项目环境。 | 在原专用环境按清单安装，保留满足要求的包。 |
 | 项目安装信息、CLI入口变化 | 项目同步时更新安装。 | 重做 `python -m pip install --no-deps -e .`，明确在目标Conda环境执行。 |
-| 从清单删除依赖 | 默认同步清理不需要的额外包。 | 本阶段标准方式是新建环境后按完整清单安装和验证，再切换；旧环境保留。 |
+| 从清单删除依赖 | 默认同步清理不需要的额外包。 | 采用新建环境后按完整清单安装和验证，再切换；旧环境保留。 |
 | 更换Python或调整Conda基础包 | 在独立环境验证，不隐式升级。 | 新建环境验证，避免在pip已安装项目库后交替用Conda改同组包。 |
 
 重建时在快速开始命令中换一个尚不存在的环境名，例如 `quant-core-dev-v2`，所有后续命令及编辑器解释器一起切换。维护者删除依赖时须在变更说明中标明；不自动卸载来源不明或可能属于Conda基础环境的包。
 
-共同依赖变更的双路线验收还须核对Conda基础Python分发与清单的重叠。本轮Conda预装的 `packaging` 已满足清单，pip保留原文件；这不表示它改由pip拥有。如果以后该基础包与新清单冲突，按基础包变更处理：先在新环境验证兼容组合并记录，不能直接用pip覆盖Conda管理的文件或自行放松共同版本。Conda的时区数据包与Python的同名分发也须按实际文件位置区分，不能仅凭名称判断冲突。
+共同依赖变更的双路线验收还须核对Conda基础Python分发与清单的重叠。既有验证中 Conda 预装的 `packaging` 满足清单，pip 保留了原文件；这不表示它改由 pip 拥有，其他环境须重新核对。如果以后该基础包与新清单冲突，按基础包变更处理：先在新环境验证兼容组合并记录，不能直接用pip覆盖Conda管理的文件或自行放松共同版本。Conda的时区数据包与Python的同名分发也须按实际文件位置区分，不能仅凭名称判断冲突。
 
 安装清单不是原子事务，也不是自动回滚机制。失败时保留输出，核对当前状态后重试或新建环境，不通过放松约束、改锁或降断言绕过冲突。`pip check` 只验证已安装包的依赖关系，不核对完整锁定清单、不发现所有残留包；`--require-hashes` 核对本次安装取得的包，不逐文件复验已满足版本的包。
 
-更新完成后，uv路线运行原统一检查，Conda路线先运行目标环境的 `python -m pip check`，再运行同一 `quant-core check`。两条路线均按根规则在新输出目录运行demo、validate和replay，记录真实结果与环境差异。源码CLI中既有uv调用说明不构成Conda入口限制：实际检查子进程使用启动CLI的同一个Python解释器；本阶段没有为文档兼容重写源码注释。
+更新完成后，uv路线运行原统一检查，Conda路线先运行目标环境的 `python -m pip check`，再运行同一 `quant-core check`。两条路线均按根规则在新输出目录运行demo、validate和replay，记录真实结果与环境差异。源码CLI中既有uv调用说明不构成Conda入口限制：实际检查子进程使用启动CLI的同一个Python解释器；不能仅凭历史注释把 Conda 误判为不受支持的运行入口。
 
 ## 自动检查与边界
 
-`quant-core check` 执行的实际子项以 CLI 和 PROJECT_STATE 的运行记录为准。治理工具检查 src/tests/tools 中全部自有 Python 的模块/类/函数真正中文 docstring、函数类型、核心依赖和需求引用。普通字符串不能替代 docstring；不要求普通语句或 else/except/finally 紧邻中文说明，不按注释比例、固定行数、段落标签或关键词计数打分。排除名单保持为空。
+`quant-core check` 执行的实际子项以 CLI 和 PROJECT_STATE 链接的验收记录为准。治理工具检查 src/tests/tools 中全部自有 Python 的模块/类/函数真正中文 docstring、函数类型、核心依赖和需求引用。普通字符串不能替代 docstring；不要求普通语句或 else/except/finally 紧邻中文说明，不按注释比例、固定行数、段落标签或关键词计数打分。排除名单保持为空。
 
 `quant-core check --base <实际评审基线>` 将基线交给 `tools.governance.sensitive_diff_report(root, base)`；它覆盖已暂存、未暂存、删除和未跟踪文件，使用明确 Git 基线报告测试、风险/执行/账务、配置、AGENTS、CI、提示词、治理工具与依赖变更。未给基线时明确“未执行差异审计”。报告不是批准文件；删除测试或降低断言的禁止不能通过勾选框解除。
 
 自动检查只能验证说明存在，不能证明：解释正确、主要业务阶段清楚、关键边界没有遗漏、文档完整同步、断言未削弱、风险实际更严格、审批者身份有效或历史数据真实。独立复核还要检查是否存在大量语法复述、超过实现的承诺，以及把失败改为静默成功、把异常变成默认值、把风险阈值放宽等改动。
 
-注释专项先保存本轮起始工作区快照（包含前轮未提交成果），再按根规则比较去除真正 docstring 与位置信息后的 AST；普通字符串、签名、运算、测试输入和断言仍参与比较。HEAD 差异用于敏感变更提示，不能代替本轮比较基线。第二轮局部上下文增强不修改检查器、治理测试、CI或密度门槛。检查 docstring 的运行时读取与 Schema 生成影响，新目录保留运行证据，不把新源码哈希写回旧清单。第一轮事实见 [迁移记录](../audit/comment-semantics-migration.md)，第二轮见 [局部上下文增强记录](../audit/local-context-readability.md)。
+注释专项先保存本轮起始工作区快照（包含前轮未提交成果），再按根规则比较去除真正 docstring 与位置信息后的 AST；普通字符串、签名、运算、测试输入和断言仍参与比较。HEAD 差异用于敏感变更提示，不能代替本轮比较基线。仅注释或文档任务不得顺便修改检查器、治理测试、CI 或增加密度门槛。检查 docstring 的运行时读取与 Schema 生成影响，新目录保留运行证据，不把新源码哈希写回旧清单。第一轮事实见 [迁移记录](../audit/comment-semantics-migration.md)，第二轮见 [局部上下文增强记录](../audit/local-context-readability.md)。
 
 ## 项目新读者语义复核
 
@@ -66,6 +66,66 @@ uv export --locked --offline --format requirements-txt --group dev --no-emit-pro
 
 ## 敏感变更与发布
 
-后续修改规则、CI、审批边界、安全边界、依赖锁和风险参数必须有明确授权依据与独立复核。初始工程创建已获授权，不要求开发者为每个文件再次确认。禁止开发 AI 自签批准、自动改变生产依赖或扩大账户范围。
+后续修改规则、CI、审批边界、安全边界、依赖锁和风险参数必须有明确授权依据与独立复核。历史工程授权不自动延续到新任务；已经明确授权的当前范围无需逐文件重复确认。禁止开发 AI 自签批准、自动改变生产依赖或扩大账户范围。
 
 本仓库不宣称已配置远端分支保护。管理员未来配置保护分支、独立审查者、受控发布环境和审计记录；未满足实盘阻塞项不得实盘。迁移与回滚需先备份事件库和清单，恢复流程见 recovery.md。
+
+## 工具准备与环境排障
+
+本节供尚未具备环境或安装失败时查阅；正常首次流程在[快速开始](quickstart.md)。工具安装由使用者决定，不因文档维护而自动执行。平台验证见[macOS 记录](../audit/macos-development.md)与[双入口记录](../audit/conda-compatibility.md)。
+
+### uv 与 PATH
+
+先运行 `command -v uv` 和 `uv --version`。若命令不可用，先检查 `~/.local/bin/uv` 等已有安装位置；只是没有加入 PATH 时，不需要重复安装。PATH 是终端查找命令的目录列表。
+
+确实没有安装时，可按官方指定版本方式安装 **uv 0.12.5**，与仓库 CI 使用的版本一致。以下步骤会联网，只适用于 `~/.local/bin/uv` 和 `~/.local/bin/uvx` 均不存在（也没有同名符号链接）的情况；已有其他版本不自动覆盖或升级。
+
+```bash
+uv_installer=$(mktemp)
+curl -LsSf https://astral.sh/uv/0.12.5/install.sh -o "$uv_installer" &&
+  env UV_NO_MODIFY_PATH=1 UV_INSTALL_DIR="$HOME/.local/bin" sh "$uv_installer"
+```
+
+安装器写入用户目录，不需要 sudo，也不安装系统 Python。`UV_NO_MODIFY_PATH=1` 禁止它修改 shell 启动配置，详见 [uv 官方安装选项](https://docs.astral.sh/uv/reference/installer/)。安装失败时保留输出，不继续假定 uv 已可用。
+
+使用上述用户目录安装时，在**当前终端**启用并核对：
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+command -v uv
+uv --version
+```
+
+这不会写入 `.zshrc` 等配置文件；新开终端后需要重新设置，或直接使用 `~/.local/bin/uv` 代替下文的 `uv`。不要将 `source ~/.local/bin/env` 作为必需步骤：本安装方式没有要求生成该脚本。
+
+经常在macOS的zsh终端开发时，也可以把下面这一段加入自己的 `~/.zshrc`，让之后的新交互式终端自动找到uv。先检查已有内容，只添加一次，不覆盖其他配置；判断条件避免重复添加目录。这是用户主动配置PATH的步骤，与安装器自动修改shell配置分开。
+
+```bash
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+```
+
+保存后新开终端，或在已有终端执行 `source ~/.zshrc`，再运行 `command -v uv` 与 `uv --version` 确认。无需sudo；不会修改系统Python或项目依赖，但该目录中的命令会进入终端的查找范围。
+
+### Conda、项目安装与解释器
+
+先执行 `conda --version`。没有 Conda 时可按 [Miniforge 官方说明](https://github.com/conda-forge/miniforge#install)选择适合本机架构的发行版；不覆盖已有工具或全局配置。项目环境的创建及安装命令在[快速开始](quickstart.md#conda-路线)，无需先安装 uv、执行 `conda init` 或向 base 安装项目库。
+
+`conda run -n quant-core-dev python -c "import sys; print(sys.executable)"` 应指向项目环境，编辑器也应选择这个解释器。找不到 `quant-core` 时，先确认已执行 `python -m pip install --no-deps -e .`；`requirements.txt` 不包含本项目安装。
+
+可编辑安装会让后续源码修改直接生效。`--no-deps` 只避免重新解析项目依赖，构建隔离仍可能下载 `pyproject.toml` 的构建工具；这部分以及 Conda 的 Python/系统库不由 `uv.lock` 完整锁定。相同项目包版本不意味着两个系统环境完全相同。
+
+项目库不再用 `conda install` 或 `conda update --all` 自由更新；按共同清单安装失败时保留输出，核对渠道、Python 版本和基础包所有权。`pip check` 只检查依赖关系，不证明所有旧包已清理。环境不一致按[更新与重建](#两条路线的更新与重建)处理，不放松版本或哈希约束。
+
+### 开发检查与并发
+
+```bash
+# uv
+uv run --offline --locked quant-core check
+# Conda
+conda run -n quant-core-dev python -m pip check
+conda run -n quant-core-dev quant-core check
+```
+
+需要敏感差异报告时加 `--base <实际Git基线>`。验证两套环境时顺序运行完整检查；测试使用固定账户身份，可能争用同机账户锁。锁协调同机、同账户的执行操作，不控制其他机器或券商端人工操作，细节见[恢复手册](recovery.md#事件顺序与公司行动)。

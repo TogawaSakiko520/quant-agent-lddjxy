@@ -1,59 +1,49 @@
-# 文档导航
+# 按任务查找文档
 
-第一次了解项目，先读[仓库概览](../README.md)，再按[快速开始](runbooks/quickstart.md)运行本地演示。下面按阅读目的组织文档。
+## 开始使用
 
-## 运行
+- [项目概览](../README.md)：判断项目用途，选择离线或 Paper 入口。
+- [快速开始](runbooks/quickstart.md)：选择 uv / Conda，第一次运行 demo、看结果并校验。
+- [命令与产物参考](commands.md)：查完整参数、文件位置、研究/报告命令和退出码。
 
-| 想做什么 | 阅读入口 |
+## 查看结果
+
+- [报告与展示窗口](runbooks/quickstart.md#3-查看报告或展示窗口)：已有数据直接查看，新检出先生成数据。
+- [Paper 结果](runbooks/alpaca-paper.md#6-查看结果)：区分计划、远端订单、成交与核对。
+- [备份与迁移](runbooks/backups-migrations.md)：停止写入后保留和恢复记录。
+
+## 使用 Alpaca Paper
+
+- [Paper 操作手册](runbooks/alpaca-paper.md)：配置与凭据、只读、计划、授权执行、恢复和休市提交撤单测试。
+- [Paper 配置](configuration.md#独立-paper-配置)与[输入文件格式](contracts.md#paper-输入文件参考)：核对预算、策略选择、身份和总回报资料。
+- [故障与恢复](runbooks/recovery.md)：处理未知订单、撤单竞态、账户差异及定向旧版维护。
+
+## 理解策略与实现
+
+- [周频双因子策略](strategies/weekly-two-factor.md)、[动量](factors/momentum.md)、[低波动](factors/low-volatility.md)：原公式、评分与组合约束。
+- [MA5/MA20 策略](strategies/ma-trend.md)：独立价格趋势、整股目标和未知行业处理。
+- [配置参考](configuration.md)、[共同契约](contracts.md)：参数、身份、时间、金额和消息兼容。
+- [架构](../ARCHITECTURE.md)、[业务代码导读](code_walkthrough/business-chain.md)：模块职责、对象与调用关系。
+- [市场状态观察器](regime.md)、[因子研究](research.md)：观察规则与研究边界。market-intel 目前只有共同契约，尚无信息采集服务。
+
+## 开发和维护
+
+- [工程规则](../AGENTS.md)、[维护流程](runbooks/ai-maintenance.md)：中文注释、独立测试/复核、依赖锁定、环境更新及检查。
+- [文档表达原则](AGENTS.md#文档表达原则)：内容分工与写作要求。
+- [扩展手册](runbooks/extensions.md)、[维护提示词](../prompts/README.md)：新增因子/适配器、接手、实现、评审与故障处理。
+- [行为规范](../SPEC.md)、[需求映射](requirements.json)：需求到实现、测试和文档的对应。
+- [离线引擎 ADR](adr/0001-offline-engine.md)、[治理证据 ADR](adr/0002-governance-evidence.md)：设计取舍与检查边界。
+
+## 当前状态与历史记录
+
+**当前事实只看 [PROJECT_STATE](../PROJECT_STATE.md)**；[CHANGELOG](../CHANGELOG.md)按时间概括主要变化。[假设与阻塞](../ASSUMPTIONS.md)说明外部前提。
+
+下面均为特定日期、基线和环境的记录，不延续当时账户或发布授权。`artifacts/` 原始证据不随 Git 分发，历史链接可能只在留存产物的本机可用。
+
+| 主题 | 历史记录 |
 |---|---|
-| 安装、跑一次演示、看报告、校验和回放 | [快速开始](runbooks/quickstart.md)：完整命令、生成文件和退出码。 |
-| 看懂默认本金、持仓比例、费用等参数 | [演示配置](configuration.md)。 |
-| 处理失败、未知订单或账户差异 | [故障与恢复](runbooks/recovery.md)。 |
-| 保留数据库和运行记录、恢复到新目录 | [备份与迁移](runbooks/backups-migrations.md)。 |
-
-## 理解项目
-
-| 想了解什么 | 阅读入口 |
-|---|---|
-| 模块分别负责什么，为什么这样拆分 | [架构说明](../ARCHITECTURE.md)。 |
-| 数据如何变成评分、目标、订单和账户记录 | [业务代码导读](code_walkthrough/business-chain.md)。 |
-| 股票如何排名，希望持有哪些股票 | [周频双因子策略](strategies/weekly-two-factor.md)。 |
-| 两个因子如何计算 | [动量因子](factors/momentum.md)、[低波动因子](factors/low-volatility.md)：公式、价格窗口和手算例子。 |
-| “市场状态”是什么，是否改变交易 | [市场状态观察器](regime.md)。 |
-| 因子与后续收益如何研究 | [研究说明](research.md)：样本划分、避免未来信息泄漏及统计结果的限制。 |
-| 模块交换哪些数据，时间、身份和金额如何约定 | [共同数据契约](contracts.md)。其中的 market-intel 在本仓库只有候选信息的数据格式约定，尚未实现信息采集，也不是运行演示需要安装的组件。 |
-| 为什么当前使用本地模拟券商 | [离线引擎决策](adr/0001-offline-engine.md)：FakeBroker 的用途与正式引擎尚未验收的边界。 |
-
-## 开发与维护
-
-| 想做什么 | 阅读入口 |
-|---|---|
-| 确认功能要求和验收行为 | [行为规范](../SPEC.md)、[需求与实现映射](requirements.json)。 |
-| 修改源码、测试或说明 | [根工程规则](../AGENTS.md)、[维护流程](runbooks/ai-maintenance.md)。 |
-| 新增因子、数据来源或适配器 | [扩展手册](runbooks/extensions.md)。 |
-| 使用接手、实现、复核或故障处理提示词 | [维护提示词导航](../prompts/README.md)。 |
-| 了解自动检查能证明什么 | [治理检查的能力边界](adr/0002-governance-evidence.md)。 |
-| 编写或整理文档 | [文档表达原则](AGENTS.md#文档表达原则)；代码注释规范仍以根工程规则为准。 |
-
-## 状态与历史
-
-| 想确认什么 | 阅读入口 |
-|---|---|
-| 当前完成了什么、哪些命令实际验证过 | [项目状态](../PROJECT_STATE.md)。历史记录按当时的代码和环境解释。 |
-| macOS 能否用于本地开发，具体测过哪些环境与命令 | [macOS 开发环境核验](audit/macos-development.md)。 |
-| uv和Conda是否使用同一套项目依赖，哪些差异实际验证过 | [双入口兼容记录](audit/conda-compatibility.md)；日常命令见[README末尾](../README.md#拉取代码后如何更新环境)。 |
-| 仓库有哪些变更 | [变更日志](../CHANGELOG.md)。 |
-| 有哪些未解决假设或外部条件 | [假设与阻塞](../ASSUMPTIONS.md)。 |
-| 接入外部模拟交易前还缺什么 | [上线阻塞清单](audit/launch-blockers.md)、[准备审计](audit/readiness.md)。 |
-| 既有模拟交易路线讨论的依据 | [免费 Paper 路线记录](adr/free-paper-route.md)：保留当时的调查与决策背景，不表示已接入 Alpaca。 |
-| 注释规范如何演进及如何核验 | [分层解释迁移](audit/comment-semantics-migration.md)、[局部上下文增强](audit/local-context-readability.md)、[全仓可读性核验](audit/readability-compliance.md)。 |
-
-运行报告和数据库由程序写入本地 `artifacts/`，不随 Git 保存。生成与读取这些文件的方法集中在快速开始，仓库文档不依赖某次运行目录已经存在。
-
-## Alpaca Paper 接入
-
-[操作手册](runbooks/alpaca-paper.md)说明显式只读、补充资料、计划与受控执行；[本轮记录](audit/alpaca-paper.md)区分已实现、真实只读及未完成的策略闭环。
-
-MA最小Paper路径：[策略定义](strategies/ma-trend.md)、[本轮验证](audit/ma-paper.md)，展示启动同时支持uv与Conda，见根README。
-
-- [Paper休市提交撤单验收](audit/paper-queue.md)：真实远端订单身份、撤单与重启核对，和实际成交验收的区别。
+| Paper 接入与验证 | [初始只读接入](audit/alpaca-paper.md)、[MA 计划](audit/ma-paper.md)、[真实提交撤单](audit/paper-queue.md) |
+| 环境 | [macOS 验证](audit/macos-development.md)、[uv / Conda 验证](audit/conda-compatibility.md) |
+| 原始审计及建议 | [准备审计](audit/readiness.md)、[当时阻塞](audit/launch-blockers.md)、[后续 PR 建议](audit/next-prs.md)、[免费 Paper 路线 ADR](adr/free-paper-route.md) |
+| 注释规范演进 | [分层解释迁移](audit/comment-semantics-migration.md)、[局部上下文增强](audit/local-context-readability.md)、[全仓核验](audit/readability-compliance.md) |
+| 文档与交接 | [本次整理验证](audit/documentation-20260920.md)、[整理前状态及变更全文](audit/project-history-20260920.md) |
