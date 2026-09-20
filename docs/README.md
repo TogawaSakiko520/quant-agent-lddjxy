@@ -20,6 +20,7 @@
 
 ## 理解策略与实现
 
+- [股票量化交易数学模型入门](quantitative-trading-mathematical-model.md)：从数学角度理解数据、预测、决策、风险、订单与账户更新。
 - [周频双因子策略](strategies/weekly-two-factor.md)、[动量](factors/momentum.md)、[低波动](factors/low-volatility.md)：原公式、评分与组合约束。
 - [MA5/MA20 策略](strategies/ma-trend.md)：独立价格趋势、整股目标和未知行业处理。
 - [配置参考](configuration.md)、[共同契约](contracts.md)：参数、身份、时间、金额和消息兼容。
