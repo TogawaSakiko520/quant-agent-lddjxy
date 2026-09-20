@@ -10,3 +10,7 @@ artifacts/
 .env
 *.sqlite-wal
 *.sqlite-shm
+
+# 私人 Agent 规则由独立 ai-config 仓库备份；任意层级均不进入代码仓库。
+AGENTS.md
+AGENTS.Backup.md
