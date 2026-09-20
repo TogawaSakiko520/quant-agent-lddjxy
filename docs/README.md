@@ -15,6 +15,7 @@
 
 | 想了解什么 | 阅读入口 |
 |---|---|
+| 从数学角度理解股票、原始输入、预测、决策、风险、订单与账户更新 | [股票量化交易数学模型入门](quantitative-trading-mathematical-model.md)。 |
 | 模块分别负责什么，为什么这样拆分 | [架构说明](../ARCHITECTURE.md)。 |
 | 数据如何变成评分、目标、订单和账户记录 | [业务代码导读](code_walkthrough/business-chain.md)。 |
 | 股票如何排名，希望持有哪些股票 | [周频双因子策略](strategies/weekly-two-factor.md)。 |
